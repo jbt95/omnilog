@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  BatchedDrain,
-  CreateAxiomDrain,
-  CreateFingerprint,
-  CreateWebhookDrain,
+  Drain,
 } from '../src/index.js';
 import type { Envelope } from '../src/index.js';
 
@@ -24,7 +21,7 @@ describe('Drains', function DrainsSuite() {
     const fetchSpy = vi.fn<FetchMock>();
     vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
 
-    const drain = CreateAxiomDrain({});
+    const drain = Drain.Axiom({});
     const event: Envelope<unknown, unknown> = {
       kind: 'log',
       name: 'drain.axiom',
@@ -54,7 +51,7 @@ describe('Drains', function DrainsSuite() {
     vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const drain = CreateWebhookDrain({
+    const drain = Drain.Webhook({
       url: 'https://example.com/webhook',
       headers: { 'X-Test': '1' },
     });
@@ -82,10 +79,10 @@ describe('Drains', function DrainsSuite() {
 
   it('batches events and flushes on size', async function BatchesEventsAndFlushesOnSize() {
     const batches: Array<Array<unknown>> = [];
-    function Drain(events: Array<unknown>) {
+    function CaptureDrain(events: Array<unknown>) {
       batches.push(events);
     }
-    const batched = new BatchedDrain(Drain, { batchSize: 2, flushInterval: 60000 });
+    const batched = new Drain.Batched(CaptureDrain, { batchSize: 2, flushInterval: 60000 });
 
     const eventA: Envelope<unknown, unknown> = {
       kind: 'log',
@@ -112,6 +109,62 @@ describe('Drains', function DrainsSuite() {
     expect(batches[0]).toHaveLength(2);
   });
 
+  it('creates sink handles with flush', async function CreatesSinkHandlesWithFlush() {
+    const batches: Array<Array<unknown>> = [];
+    function CaptureDrain(events: Array<unknown>) {
+      batches.push(events);
+    }
+
+    const batched = new Drain.Batched(CaptureDrain, { batchSize: 2, flushInterval: 60000 });
+    const handle = {
+      Sink: batched.CreateSink(),
+      Flush: () => batched.Flush(),
+    };
+
+    const event: Envelope<unknown, unknown> = {
+      kind: 'log',
+      name: 'drain.handle',
+      ts: new Date().toISOString(),
+      schema: { fingerprint: 'handle' },
+      context: { traceId: 'trace_handle' },
+      payload: { ok: true },
+    };
+
+    handle.Sink(event);
+    await handle.Flush();
+
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toHaveLength(1);
+  });
+
+  it('flushes pending events from AxiomSink', async function FlushesPendingEventsFromAxiomSink() {
+    const fetchSpy = vi.fn(async () => new Response(null, { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
+
+    const drain = Drain.AxiomSink({
+      endpoint: 'https://axiom.example',
+      apiKey: 'token',
+      dataset: 'dataset',
+      batchSize: 10,
+      flushInterval: 60000,
+    });
+
+    const event: Envelope<unknown, unknown> = {
+      kind: 'log',
+      name: 'drain.axiom',
+      ts: new Date().toISOString(),
+      schema: { fingerprint: 'axiom' },
+      context: { traceId: 'trace_1' },
+      payload: { ok: true },
+    };
+
+    drain.Sink(event);
+    await drain.Flush();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
   it('creates deterministic fingerprints', function CreatesDeterministicFingerprints() {
     const eventA: Envelope<unknown, unknown> = {
       kind: 'log',
@@ -130,8 +183,8 @@ describe('Drains', function DrainsSuite() {
       payload: { ok: true },
     };
 
-    const fingerprintA = CreateFingerprint(eventA);
-    const fingerprintB = CreateFingerprint(eventB);
+    const fingerprintA = Drain.Fingerprint(eventA);
+    const fingerprintB = Drain.Fingerprint(eventB);
 
     expect(fingerprintA).toBe(fingerprintB);
     expect(fingerprintA).toHaveLength(16);

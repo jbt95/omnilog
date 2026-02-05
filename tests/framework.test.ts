@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { AutoFlush, CreateRequestContext, ExtractRequestContext } from '../src/index.js';
+import { Context } from '../src/index.js';
 
 describe('Framework', function FrameworkSuite() {
   it('extracts request context and runs', function ExtractsRequestContextAndRuns() {
     const contextSchema = z.object({ userId: z.string() }).passthrough();
-    const contextManager = CreateRequestContext(contextSchema);
+    const contextManager = Context.Request(contextSchema);
     const request = new Request('https://example.com/orders?x=1', {
       method: 'POST',
       headers: {
@@ -14,7 +14,7 @@ describe('Framework', function FrameworkSuite() {
       },
     });
 
-    const requestContext = ExtractRequestContext(request);
+    const requestContext = Context.Extract(request);
 
     const result = contextManager.Run({ ...requestContext, userId: 'user_1' }, () =>
       contextManager.Get(),
@@ -35,7 +35,7 @@ describe('Framework', function FrameworkSuite() {
       },
     };
 
-    const logger = AutoFlush(target);
+    const logger = Context.AutoFlush(target);
     await logger.Dispose();
 
     expect(target.flushCount).toBe(1);

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { CreateContext } from '../src/index.js';
+import { Context } from '../src/index.js';
 
 describe('Context', function ContextSuite() {
   it('runs and retrieves context', function RunsAndRetrievesContext() {
     const contextSchema = z.object({ traceId: z.string(), userId: z.string().optional() });
-    const contextManager = CreateContext(contextSchema);
+    const contextManager = Context.Create(contextSchema);
 
     const result = contextManager.Run({ traceId: 'trace_1' }, () =>
       contextManager.With({ userId: 'user_1' }, () => contextManager.Get()),

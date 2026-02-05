@@ -1,16 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { stdout } from 'node:process';
 import {
-  CreateEnvironmentSink,
-  CreateStructuredSink,
-  CreateVisualSink,
+  Sink,
 } from '../src/index.js';
 import type { Envelope } from '../src/index.js';
 
 describe('Sinks', function SinksSuite() {
   it('writes structured sink output', function WritesStructuredSinkOutput() {
     const writeSpy = vi.spyOn(stdout, 'write').mockImplementation(() => true);
-    const sink = CreateStructuredSink();
+    const sink = Sink.Structured();
     const event: Envelope<unknown, unknown> = {
       kind: 'log',
       name: 'sink.structured',
@@ -32,7 +30,7 @@ describe('Sinks', function SinksSuite() {
 
   it('writes visual sink output', function WritesVisualSinkOutput() {
     const writeSpy = vi.spyOn(stdout, 'write').mockImplementation(() => true);
-    const sink = CreateVisualSink();
+    const sink = Sink.Visual();
     const event: Envelope<unknown, unknown> = {
       kind: 'log',
       name: 'sink.visual',
@@ -54,7 +52,7 @@ describe('Sinks', function SinksSuite() {
 
   it('uses structured sink in production mode', function UsesStructuredSinkInProductionMode() {
     const writeSpy = vi.spyOn(stdout, 'write').mockImplementation(() => true);
-    const sink = CreateEnvironmentSink({ development: false });
+    const sink = Sink.Environment({ development: false });
     const event: Envelope<unknown, unknown> = {
       kind: 'log',
       name: 'sink.env',

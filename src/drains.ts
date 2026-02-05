@@ -4,7 +4,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { Envelope, Sink } from './types.js';
+import type { DrainHandle, Envelope, Sink } from './types.js';
 
 /**
  * Configuration for drains
@@ -31,6 +31,53 @@ export type Drain = <Context, Payload>(
   events: Envelope<Context, Payload>[],
 ) => Promise<void> | void;
 
+function CreateDrainSink<Context, Payload>(
+  drain: Drain,
+  options?: { batchSize?: number; flushInterval?: number },
+): DrainHandle<Context, Payload> {
+  const batched = new BatchedDrain<Context, Payload>(drain, options);
+  return {
+    Sink: batched.CreateSink(),
+    Flush: () => batched.Flush(),
+  };
+}
+
+/**
+ * Create a batched Axiom sink with flush handle
+ *
+ * @param config - Drain configuration
+ * @returns Drain handle with sink and flush
+ */
+export function CreateAxiomSink<Context = unknown, Payload = unknown>(
+  config: DrainConfig,
+): DrainHandle<Context, Payload> {
+  return CreateDrainSink(CreateAxiomDrain(config), config);
+}
+
+/**
+ * Create a batched OTLP sink with flush handle
+ *
+ * @param config - Drain configuration
+ * @returns Drain handle with sink and flush
+ */
+export function CreateOTLPSink<Context = unknown, Payload = unknown>(
+  config: DrainConfig,
+): DrainHandle<Context, Payload> {
+  return CreateDrainSink(CreateOTLPDrain(config), config);
+}
+
+/**
+ * Create a batched webhook sink with flush handle
+ *
+ * @param config - Drain configuration with URL
+ * @returns Drain handle with sink and flush
+ */
+export function CreateWebhookSink<Context = unknown, Payload = unknown>(
+  config: DrainConfig & { url: string },
+): DrainHandle<Context, Payload> {
+  return CreateDrainSink(CreateWebhookDrain(config), config);
+}
+
 /**
  * Create an Axiom drain
  * 
@@ -45,14 +92,14 @@ export type Drain = <Context, Payload>(
  * 
  * @example
  * ```typescript
- * const drain = CreateAxiomDrain({
+ * const drain = CreateAxiomSink({
  *   endpoint: 'https://api.axiom.co',
  *   apiKey: process.env.AXIOM_TOKEN,
  *   dataset: 'my-app',
  * });
  * 
  * const loggerFactory = TypedLogger.For(registry, {
- *   sinks: [drain],
+ *   sinks: [drain.Sink],
  * });
  * const logger = loggerFactory.Singleton();
  * ```
@@ -99,12 +146,12 @@ export function CreateAxiomDrain(config: DrainConfig): Drain {
  * 
  * @example
  * ```typescript
- * const drain = CreateOTLPDrain({
+ * const drain = CreateOTLPSink({
  *   endpoint: 'http://localhost:4318',
  * });
  * 
  * const loggerFactory = TypedLogger.For(registry, {
- *   sinks: [drain],
+ *   sinks: [drain.Sink],
  * });
  * const logger = loggerFactory.Singleton();
  * ```
@@ -165,13 +212,13 @@ export function CreateOTLPDrain(config: DrainConfig): Drain {
  * 
  * @example
  * ```typescript
- * const drain = CreateWebhookDrain({
+ * const drain = CreateWebhookSink({
  *   url: 'https://my-service.com/webhook',
  *   headers: { 'X-Custom-Header': 'value' },
  * });
  * 
  * const loggerFactory = TypedLogger.For(registry, {
- *   sinks: [drain],
+ *   sinks: [drain.Sink],
  * });
  * const logger = loggerFactory.Singleton();
  * ```

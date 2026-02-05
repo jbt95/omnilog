@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CreateRedactionPolicy } from '../src/index.js';
+import { Redaction } from '../src/index.js';
 
 describe('Redaction', function RedactionSuite() {
   it('applies strict redaction mode', function AppliesStrictRedactionMode() {
-    const policy = CreateRedactionPolicy('strict');
+    const policy = Redaction.Policy('strict');
     const data = { email: 'test@example.com', password: 'secret123' };
     const tags: Record<string, 'pii' | 'secret' | 'token'> = {
       email: 'pii',
@@ -17,7 +17,7 @@ describe('Redaction', function RedactionSuite() {
   });
 
   it('applies lenient redaction mode', function AppliesLenientRedactionMode() {
-    const policy = CreateRedactionPolicy('lenient');
+    const policy = Redaction.Policy('lenient');
     const data = { email: 'test@example.com', password: 'secret123' };
     const tags: Record<string, 'pii' | 'secret' | 'token'> = {
       email: 'pii',
@@ -31,7 +31,7 @@ describe('Redaction', function RedactionSuite() {
   });
 
   it('applies dev redaction mode', function AppliesDevRedactionMode() {
-    const policy = CreateRedactionPolicy('dev');
+    const policy = Redaction.Policy('dev');
     const data = { email: 'test@example.com', password: 'secret123', token: 'abc' };
     const tags: Record<string, 'pii' | 'secret' | 'token'> = {
       email: 'pii',
@@ -47,7 +47,7 @@ describe('Redaction', function RedactionSuite() {
   });
 
   it('redacts nested paths with tag arrays', function RedactsNestedPathsWithTagArrays() {
-    const policy = CreateRedactionPolicy('strict');
+    const policy = Redaction.Policy('strict');
     const data = { user: { email: 'test@example.com' }, token: 'secret' };
     const tags = {
       'user.email': ['pii', 'token'],

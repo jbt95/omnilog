@@ -28,7 +28,7 @@ type EventAccumulator<Context> = {
   Emit: <Name extends string, Payload>(
     name: Name,
     payload: Payload,
-  ) => Promise<Envelope<Context, Payload> | null>;
+  ) => Envelope<Context, Payload> | null;
 };
 
 export type LoggerInstance<
@@ -39,7 +39,7 @@ export type LoggerInstance<
     name: Name,
     payload: z.output<EventByName<Events, Name>['schema']>,
     overrideContext?: Partial<z.output<ContextSchema>>,
-  ) => Promise<Envelope<z.output<ContextSchema>, z.output<EventByName<Events, Name>['schema']>> | null>;
+  ) => Envelope<z.output<ContextSchema>, z.output<EventByName<Events, Name>['schema']>> | null;
   Accumulate: () => EventAccumulator<z.output<ContextSchema>>;
   Run: ContextManager<z.output<ContextSchema>>['Run'];
 };
@@ -59,17 +59,17 @@ export type LoggerInstance<
  * });
  *
  * // Simple emission
- * await logger.Emit('user.login', { userId: '123' });
+ * logger.Emit('user.login', { userId: '123' });
  *
  * // With context
  * await logger.Run({ traceId: 'abc' }, async () => {
- *   await logger.Emit('user.login', { userId: '123' });
+ *   logger.Emit('user.login', { userId: '123' });
  * });
  *
  * // Accumulate context over time
  * const acc = logger.Accumulate();
  * acc.Set({ userId: '123' }).Set({ action: 'checkout' });
- * await acc.Emit('checkout.completed', { total: 99.99 });
+ * acc.Emit('checkout.completed', { total: 99.99 });
  * ```
  */
 export type LoggerOptions<Context> = {
@@ -120,11 +120,11 @@ export function CreateLogger<
     return Math.random() <= rate;
   }
 
-  async function EmitEvent<Event extends Events[number]>(
+  function EmitEvent<Event extends Events[number]>(
     event: Event,
     payload: z.output<Event['schema']>,
     overrideContext?: Partial<Context>,
-  ): Promise<Envelope<Context, z.output<Event['schema']>> | null> {
+  ): Envelope<Context, z.output<Event['schema']>> | null {
     const payloadResult = event.schema.safeParse(payload);
     if (!payloadResult.success) {
       throw new Error(`Invalid payload for ${event.name}: ${payloadResult.error.message}`);
@@ -159,17 +159,24 @@ export function CreateLogger<
     ) as unknown as Envelope<Context, z.output<Event['schema']>>;
 
     for (const sink of sinks) {
-      await sink(redacted);
+      try {
+        const result = sink(redacted);
+        void Promise.resolve(result).catch((error) => {
+          console.error('Sink error:', error);
+        });
+      } catch (error) {
+        console.error('Sink error:', error);
+      }
     }
 
     return redacted;
   }
 
-  async function Emit<Name extends EventName>(
+  function Emit<Name extends EventName>(
     name: Name,
     payload: z.output<EventByName<Events, Name>['schema']>,
     overrideContext?: Partial<Context>,
-  ): Promise<Envelope<Context, z.output<EventByName<Events, Name>['schema']>> | null> {
+  ): Envelope<Context, z.output<EventByName<Events, Name>['schema']>> | null {
     const event = registry.eventsByName[name] as EventByName<Events, Name> | undefined;
     if (!event) throw new Error(`Unknown event: ${String(name)}`);
     return EmitEvent(event, payload, overrideContext);
@@ -195,10 +202,10 @@ export function CreateLogger<
       return accumulator;
     }
 
-    async function EmitAccumulated<Name extends EventName, Payload>(
+    function EmitAccumulated<Name extends EventName, Payload>(
       name: Name,
       payload: Payload,
-    ): Promise<Envelope<Context, Payload> | null> {
+    ): Envelope<Context, Payload> | null {
       const event = registry.eventsByName[name] as EventByName<Events, Name> | undefined;
       if (!event) throw new Error(`Unknown event: ${String(name)}`);
 
@@ -216,7 +223,7 @@ export function CreateLogger<
         event as unknown as Events[number],
         payloadWithErrors as z.output<Events[number]['schema']>,
         accumulatedContext,
-      ) as Promise<Envelope<Context, Payload> | null>;
+      ) as Envelope<Context, Payload> | null;
     }
 
     const accumulator: EventAccumulator<Context> = {

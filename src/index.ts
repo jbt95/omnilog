@@ -18,7 +18,7 @@
  * 
  * ```typescript
  * import { z } from 'zod';
- * import { TypedLogger, CreateRegistry, CreateEnvironmentSink } from 'typedlog';
+ * import { TypedLogger, Sink } from 'typedlog';
  * 
  * // Define your context schema
  * const contextSchema = z.object({
@@ -26,58 +26,101 @@
  *   userId: z.string(),
  * });
  * 
- * // Define events with schemas
- * // Create registry and logger
- * const registry = CreateRegistry(contextSchema, (registry) => [
- *   registry.DefineEvent(
- *     'user.login',
- *     z.object({ userId: z.string(), email: z.string().email() }),
- *     {
- *       kind: 'log',
- *       level: 'info',
- *       require: ['traceId'] as const,
- *       tags: { 'payload.email': 'pii' },
- *     },
- *   ),
- * ] as const);
- * const loggerFactory = TypedLogger.For(registry, {
- *   sinks: [CreateEnvironmentSink()],
+ * const loggerFactory = TypedLogger.Create({
+ *   contextSchema,
+ *   events: (registry) => [
+ *     registry.DefineEvent(
+ *       'user.login',
+ *       z.object({ userId: z.string(), email: z.string().email() }),
+ *       {
+ *         kind: 'log',
+ *         level: 'info',
+ *         require: ['traceId'] as const,
+ *         tags: { 'payload.email': 'pii' },
+ *       },
+ *     ),
+ *   ] as const,
+ *   sinks: [Sink.Environment()],
  *   policy: { redact: ['pii'] },
  * });
  * 
  * // Use the logger
- * await loggerFactory.Scoped({ traceId: 'abc', userId: '123' }, async () => {
- *   const logger = loggerFactory.Get();
- *   await logger.Emit('user.login', { userId: '123', email: 'user@example.com' });
+ * await loggerFactory.Scoped({ traceId: 'abc', userId: '123' }, (logger) => {
+ *   logger.Emit('user.login', { userId: '123', email: 'user@example.com' });
  * });
  * ```
  * 
  * @module
  */
 
-export { CreateContext } from './context.js';
-export { SchemaFingerprint } from './fingerprint.js';
-export { DefineEvent, CreateRegistry, ExportRegistry } from './registry.js';
-export {
+import { CreateContext } from './context.js';
+import { SchemaFingerprint } from './fingerprint.js';
+import { CreateRegistry, ExportRegistry } from './registry.js';
+import {
   CreateMemorySink,
   CreateVisualSink,
   CreateStructuredSink,
   CreateEnvironmentSink,
 } from './sinks.js';
-export { CreateError, ParseError, TypedError } from './error.js';
-export { ApplyRedaction, CreateRedactionPolicy } from './redaction.js';
-export {
+import { CreateError, ParseError, TypedError } from './error.js';
+import { ApplyRedaction, CreateRedactionPolicy } from './redaction.js';
+import {
   CreateAxiomDrain,
   CreateOTLPDrain,
   CreateWebhookDrain,
+  CreateAxiomSink,
+  CreateOTLPSink,
+  CreateWebhookSink,
   BatchedDrain,
   CreateFingerprint,
 } from './drains.js';
-export {
+import {
   CreateRequestContext,
   ExtractRequestContext,
   AutoFlush,
 } from './framework.js';
+
+export class Registry {
+  static Create: typeof CreateRegistry = CreateRegistry;
+  static Export: typeof ExportRegistry = ExportRegistry;
+  static SchemaFingerprint: typeof SchemaFingerprint = SchemaFingerprint;
+}
+
+export class Sink {
+  static Memory: typeof CreateMemorySink = CreateMemorySink;
+  static Visual: typeof CreateVisualSink = CreateVisualSink;
+  static Structured: typeof CreateStructuredSink = CreateStructuredSink;
+  static Environment: typeof CreateEnvironmentSink = CreateEnvironmentSink;
+}
+
+export class Drain {
+  static Axiom: typeof CreateAxiomDrain = CreateAxiomDrain;
+  static OTLP: typeof CreateOTLPDrain = CreateOTLPDrain;
+  static Webhook: typeof CreateWebhookDrain = CreateWebhookDrain;
+  static AxiomSink: typeof CreateAxiomSink = CreateAxiomSink;
+  static OTLPSink: typeof CreateOTLPSink = CreateOTLPSink;
+  static WebhookSink: typeof CreateWebhookSink = CreateWebhookSink;
+  static Batched: typeof BatchedDrain = BatchedDrain;
+  static Fingerprint: typeof CreateFingerprint = CreateFingerprint;
+}
+
+export class Error {
+  static Create: typeof CreateError = CreateError;
+  static Parse: typeof ParseError = ParseError;
+  static Typed: typeof TypedError = TypedError;
+}
+
+export class Redaction {
+  static Apply: typeof ApplyRedaction = ApplyRedaction;
+  static Policy: typeof CreateRedactionPolicy = CreateRedactionPolicy;
+}
+
+export class Context {
+  static Create: typeof CreateContext = CreateContext;
+  static Request: typeof CreateRequestContext = CreateRequestContext;
+  static Extract: typeof ExtractRequestContext = ExtractRequestContext;
+  static AutoFlush: typeof AutoFlush = AutoFlush;
+}
 export { TypedLogger } from './typed-logger.js';
 
 export type {
@@ -93,13 +136,15 @@ export type {
   LogLevel,
   Policy,
   RedactionMode,
-  Registry,
+  Registry as RegistryType,
   RegistryExport,
-  Sink,
+  Sink as SinkType,
   TagMap,
-  Drain,
+  Drain as DrainType,
   DrainConfig,
+  DrainHandle,
   RequestContext,
+  MemorySink,
 } from './types.js';
 
-export type { LoggerFactory } from './typed-logger.js';
+export type { LoggerCreateOptions, LoggerFactory } from './typed-logger.js';

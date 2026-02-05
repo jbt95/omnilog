@@ -4,7 +4,7 @@
  */
 
 import { stdout } from 'node:process';
-import type { Envelope, LogLevel, Sink } from './types.js';
+import type { Envelope, LogLevel, MemorySink, Sink } from './types.js';
 
 /**
  * ANSI color codes for log levels
@@ -144,23 +144,26 @@ export function CreateStructuredSink<Context = unknown, Payload = unknown>(): Si
  * Captures events in memory for assertions:
  * ```typescript
  * const memory = CreateMemorySink();
- * const loggerFactory = TypedLogger.For(registry, { sinks: [memory.Sink] });
+ * const loggerFactory = TypedLogger.For(registry, { sinks: [memory] });
  * const logger = loggerFactory.Singleton();
  *
- * await logger.Emit('user.login', { userId: '123' });
+ * logger.Emit('user.login', { userId: '123' });
  *
  * expect(memory.events[0].payload.userId).toBe('123');
  * ```
  *
- * @returns Object with events array and sink function
+ * @returns Sink function with captured events
  */
-export function CreateMemorySink<Context = unknown, Payload = unknown>() {
+export function CreateMemorySink<Context = unknown, Payload = unknown>(): MemorySink<Context, Payload> {
   const events: Envelope<Context, Payload>[] = [];
-  function Sink(event: unknown) {
-    events.push(event as Envelope<Context, Payload>);
-  }
 
-  return { events, Sink };
+  const sink = ((event: unknown) => {
+    events.push(event as Envelope<Context, Payload>);
+  }) as MemorySink<Context, Payload>;
+
+  sink.events = events;
+
+  return sink;
 }
 
 /**

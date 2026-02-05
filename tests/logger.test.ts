@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
-  CreateMemorySink,
-  CreateRegistry,
+  Registry,
+  Sink,
   TypedLogger,
 } from '../src/index.js';
 
 describe('Logger', function LoggerSuite() {
   it('redacts tagged fields', async function RedactsTaggedFields() {
     const contextSchema = z.object({ traceId: z.string().optional() });
-    const registry = CreateRegistry(contextSchema, (registry) => [
+    const registry = Registry.Create(contextSchema, (registry) => [
       registry.DefineEvent(
         'user.signed_in',
         z.object({ email: z.string().email(), ip: z.string() }),
@@ -23,15 +23,15 @@ describe('Logger', function LoggerSuite() {
       ),
     ] as const);
     type Context = z.infer<typeof contextSchema>;
-    const memory = CreateMemorySink<Context>();
+    const memory = Sink.Memory<Context>();
     const loggerFactory = TypedLogger.For(registry, {
-      sinks: [memory.Sink],
+      sinks: [memory],
       policy: { redact: ['pii'] },
     });
     const logger = loggerFactory.Singleton();
 
     await logger.Run({ traceId: 'trace_1' }, async () => {
-      await logger.Emit('user.signed_in', {
+      logger.Emit('user.signed_in', {
         email: 'person@example.com',
         ip: '127.0.0.1',
       });
@@ -43,7 +43,7 @@ describe('Logger', function LoggerSuite() {
 
   it('enforces required context', async function EnforcesRequiredContext() {
     const contextSchema = z.object({ traceId: z.string().optional() });
-    const registry = CreateRegistry(contextSchema, (registry) => [
+    const registry = Registry.Create(contextSchema, (registry) => [
       registry.DefineEvent('order.created', z.object({ id: z.string() }), {
         kind: 'log',
         require: ['traceId'] as const,
@@ -52,7 +52,7 @@ describe('Logger', function LoggerSuite() {
     const loggerFactory = TypedLogger.For(registry);
     const logger = loggerFactory.Singleton();
 
-    await expect(logger.Emit('order.created', { id: 'order_1' })).rejects.toThrow(
+    expect(() => logger.Emit('order.created', { id: 'order_1' })).toThrow(
       'Missing required context',
     );
   });
@@ -63,15 +63,15 @@ describe('Logger', function LoggerSuite() {
       userId: z.string().optional(),
       cart: z.any().optional(),
     });
-    const registry = CreateRegistry(contextSchema, (registry) => [
+    const registry = Registry.Create(contextSchema, (registry) => [
       registry.DefineEvent('checkout.completed', z.object({ total: z.number() }), {
         kind: 'log',
         require: ['traceId'] as const,
       }),
     ] as const);
-    const memory = CreateMemorySink<Record<string, unknown>, unknown>();
+    const memory = Sink.Memory<Record<string, unknown>, unknown>();
     const loggerFactory = TypedLogger.For(registry, {
-      sinks: [memory.Sink],
+      sinks: [memory],
     });
     const logger = loggerFactory.Singleton();
 
@@ -82,7 +82,7 @@ describe('Logger', function LoggerSuite() {
         .Set({ cart: { items: 3 } })
         .Error(new Error('Payment warning'), { step: 'payment' });
 
-      await acc.Emit('checkout.completed', { total: 99.99 });
+      acc.Emit('checkout.completed', { total: 99.99 });
     });
 
     expect(memory.events).toHaveLength(1);
@@ -92,18 +92,19 @@ describe('Logger', function LoggerSuite() {
 
   it('merges override context on emit', async function MergesOverrideContextOnEmit() {
     const contextSchema = z.object({ traceId: z.string(), userId: z.string().optional() });
-    const registry = CreateRegistry(contextSchema, (registry) => [
+    const registry = Registry.Create(contextSchema, (registry) => [
       registry.DefineEvent('context.merge', z.object({ ok: z.boolean() }), {
         kind: 'log',
         require: ['traceId'] as const,
       }),
     ] as const);
-    const memory = CreateMemorySink<{ traceId: string; userId?: string }>();
-    const loggerFactory = TypedLogger.For(registry, { sinks: [memory.Sink] });
+    type Context = z.output<typeof contextSchema>;
+    const memory = Sink.Memory<Context>();
+    const loggerFactory = TypedLogger.For(registry, { sinks: [memory] });
     const logger = loggerFactory.Singleton();
 
     await logger.Run({ traceId: 'trace_merge' }, async () => {
-      await logger.Emit('context.merge', { ok: true }, { userId: 'user_1' });
+      logger.Emit('context.merge', { ok: true }, { userId: 'user_1' });
     });
 
     expect(memory.events).toHaveLength(1);
@@ -112,7 +113,7 @@ describe('Logger', function LoggerSuite() {
 
   it('emits metric and span kinds', async function EmitsMetricAndSpanKinds() {
     const contextSchema = z.object({ traceId: z.string() });
-    const registry = CreateRegistry(contextSchema, (registry) => [
+    const registry = Registry.Create(contextSchema, (registry) => [
       registry.DefineEvent('metric.latency', z.object({ value: z.number() }), {
         kind: 'metric',
         require: ['traceId'] as const,
@@ -123,13 +124,13 @@ describe('Logger', function LoggerSuite() {
       }),
     ] as const);
 
-    const memory = CreateMemorySink<{ traceId: string }>();
-    const loggerFactory = TypedLogger.For(registry, { sinks: [memory.Sink] });
+    const memory = Sink.Memory<{ traceId: string }>();
+    const loggerFactory = TypedLogger.For(registry, { sinks: [memory] });
     const logger = loggerFactory.Singleton();
 
     await logger.Run({ traceId: 'trace_kind' }, async () => {
-      await logger.Emit('metric.latency', { value: 10 });
-      await logger.Emit('span.checkout', { name: 'checkout' });
+      logger.Emit('metric.latency', { value: 10 });
+      logger.Emit('span.checkout', { name: 'checkout' });
     });
 
     expect(memory.events[0]?.kind).toBe('metric');

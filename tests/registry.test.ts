@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { CreateRegistry, ExportRegistry } from '../src/index.js';
+import { Registry } from '../src/index.js';
 
 describe('Registry', function RegistrySuite() {
   it('rejects duplicate event names', function RejectsDuplicateEventNames() {
     const contextSchema = z.object({ traceId: z.string() });
     expect(() =>
-      CreateRegistry(contextSchema, (registry) => [
+      Registry.Create(contextSchema, (registry) => [
         registry.DefineEvent('duplicate.event', z.object({ id: z.string() }), { kind: 'log' }),
         registry.DefineEvent('duplicate.event', z.object({ id: z.string() }), { kind: 'log' }),
       ] as const),
@@ -15,7 +15,7 @@ describe('Registry', function RegistrySuite() {
 
   it('exports registry with JSON schemas', function ExportsRegistryWithJsonSchemas() {
     const contextSchema = z.object({ traceId: z.string() });
-    const registry = CreateRegistry(contextSchema, (registry) => [
+    const registry = Registry.Create(contextSchema, (registry) => [
       registry.DefineEvent(
         'checkout.started',
         z.object({
@@ -35,7 +35,7 @@ describe('Registry', function RegistrySuite() {
         },
       ),
     ] as const);
-    const exported = ExportRegistry(registry, '2.0.0');
+    const exported = Registry.Export(registry, '2.0.0');
 
     expect(exported.version).toBe('2.0.0');
     expect(exported.events).toHaveLength(1);

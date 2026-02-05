@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CreateError, ParseError, TypedError } from '../src/index.js';
+import { Error as LogError } from '../src/index.js';
 
 describe('Error', function ErrorSuite() {
   it('creates typed errors with context', function CreatesTypedErrorsWithContext() {
-    const error = CreateError({
+    const error = LogError.Create({
       message: 'Payment processing failed',
       code: 'PAYMENT_ERROR',
       reason: 'The payment gateway returned a timeout',
@@ -11,7 +11,7 @@ describe('Error', function ErrorSuite() {
       documentation: 'https://docs.example.com/errors/payment',
     });
 
-    expect(error).toBeInstanceOf(TypedError);
+    expect(error).toBeInstanceOf(LogError.Typed);
     expect(error.message).toBe('Payment processing failed');
     expect(error.code).toBe('PAYMENT_ERROR');
     expect(error.reason).toBe('The payment gateway returned a timeout');
@@ -20,7 +20,7 @@ describe('Error', function ErrorSuite() {
   });
 
   it('adds breadcrumbs to errors', function AddsBreadcrumbsToErrors() {
-    const error = CreateError({
+    const error = LogError.Create({
       message: 'Database connection failed',
       code: 'DB_ERROR',
     });
@@ -37,23 +37,23 @@ describe('Error', function ErrorSuite() {
 
   it('parses regular errors into typed errors', function ParsesRegularErrorsIntoTypedErrors() {
     const regularError = new Error('Something went wrong');
-    const typedError = ParseError(regularError);
+    const typedError = LogError.Parse(regularError);
 
-    expect(typedError).toBeInstanceOf(TypedError);
+    expect(typedError).toBeInstanceOf(LogError.Typed);
     expect(typedError.message).toBe('Something went wrong');
     expect(typedError.code).toBe('UNKNOWN_ERROR');
   });
 
   it('parses non-error values into typed errors', function ParsesNonErrorValuesIntoTypedErrors() {
-    const typedError = ParseError('boom');
+    const typedError = LogError.Parse('boom');
 
-    expect(typedError).toBeInstanceOf(TypedError);
+    expect(typedError).toBeInstanceOf(LogError.Typed);
     expect(typedError.message).toBe('boom');
     expect(typedError.code).toBe('UNKNOWN_ERROR');
   });
 
   it('converts error to JSON', function ConvertsErrorToJson() {
-    const error = CreateError({
+    const error = LogError.Create({
       message: 'Validation failed',
       code: 'VALIDATION_ERROR',
       reason: 'Required field missing',

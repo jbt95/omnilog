@@ -243,6 +243,21 @@ export type Policy = {
 export type Sink<T = unknown> = (event: T) => void | Promise<void>;
 
 /**
+ * Memory sink with captured events for testing
+ */
+export type MemorySink<Context, Payload> = Sink<Envelope<Context, Payload>> & {
+  events: Envelope<Context, Payload>[];
+};
+
+/**
+ * Drain handle with a sink and flush capability
+ */
+export type DrainHandle<Context, Payload> = {
+  Sink: Sink<Envelope<Context, Payload>>;
+  Flush: () => Promise<void>;
+};
+
+/**
  * Context manager for async context propagation
  */
 export type ContextManager<Context> = {
