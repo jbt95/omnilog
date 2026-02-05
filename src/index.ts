@@ -18,7 +18,7 @@
  * 
  * ```typescript
  * import { z } from 'zod';
- * import { TypedLogger, CreateRegistry, DefineEvent, CreateEnvironmentSink } from 'typedlog';
+ * import { TypedLogger, CreateRegistry, CreateEnvironmentSink } from 'typedlog';
  * 
  * // Define your context schema
  * const contextSchema = z.object({
@@ -27,19 +27,19 @@
  * });
  * 
  * // Define events with schemas
- * const userLogin = DefineEvent(
- *   'user.login',
- *   z.object({ userId: z.string(), email: z.string().email() }),
- *   {
- *     kind: 'log',
- *     level: 'info',
- *     require: ['traceId'] as const,
- *     tags: { 'payload.email': 'pii' },
- *   }
- * );
- * 
  * // Create registry and logger
- * const registry = CreateRegistry(contextSchema, [userLogin] as const);
+ * const registry = CreateRegistry(contextSchema, (registry) => [
+ *   registry.DefineEvent(
+ *     'user.login',
+ *     z.object({ userId: z.string(), email: z.string().email() }),
+ *     {
+ *       kind: 'log',
+ *       level: 'info',
+ *       require: ['traceId'] as const,
+ *       tags: { 'payload.email': 'pii' },
+ *     },
+ *   ),
+ * ] as const);
  * const loggerFactory = TypedLogger.For(registry, {
  *   sinks: [CreateEnvironmentSink()],
  *   policy: { redact: ['pii'] },

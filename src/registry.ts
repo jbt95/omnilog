@@ -13,6 +13,8 @@ import type {
   EventOptions,
   EventsByName,
   Registry,
+  RegistryBuilder,
+  RegistryEventOptions,
   RegistryExport,
 } from './types.js';
 
@@ -31,6 +33,37 @@ type RequireKeys<Events extends readonly EventDefAny[]> = Events[number] extends
 type EnforceRequiredKeys<Events extends readonly EventDefAny[], Context> =
   Exclude<RequireKeys<Events>, keyof Context> extends never ? Events : never;
 
+function CreateRegistryBuilder<ContextSchema extends z.ZodObject<z.ZodRawShape>>(
+  contextSchema: ContextSchema,
+): RegistryBuilder<ContextSchema> {
+  function DefineEventWithContext<
+    Name extends string,
+    Schema extends z.ZodType,
+    Kind extends EventDefAny['kind'],
+    Require extends readonly (keyof z.output<ContextSchema> & string)[] | undefined,
+  >(
+    name: Name,
+    schema: Schema,
+    options: RegistryEventOptions<ContextSchema, Schema, Kind, Require>,
+  ): EventDef<Name, Kind, Schema, Require, RegistryEventOptions<
+    ContextSchema,
+    Schema,
+    Kind,
+    Require
+  >['tags']> {
+    return DefineEvent(name, schema, options as EventOptions<Kind, Require, RegistryEventOptions<
+      ContextSchema,
+      Schema,
+      Kind,
+      Require
+    >['tags']>);
+  }
+
+  return {
+    DefineEvent: DefineEventWithContext,
+  };
+}
+
 /**
  * Define an event with schema and metadata
  *
@@ -41,17 +74,19 @@ type EnforceRequiredKeys<Events extends readonly EventDefAny[], Context> =
  *
  * @example
  * ```typescript
- * const userLogin = DefineEvent(
- *   'user.login',
- *   z.object({ userId: z.string(), email: z.string().email() }),
- *   {
- *     kind: 'log',
- *     level: 'info',
- *     require: ['traceId'] as const,
- *     tags: { 'payload.email': 'pii' },
- *     description: 'User login event',
- *   }
- * );
+ * const registry = CreateRegistry(contextSchema, (registry) => [
+ *   registry.DefineEvent(
+ *     'user.login',
+ *     z.object({ userId: z.string(), email: z.string().email() }),
+ *     {
+ *       kind: 'log',
+ *       level: 'info',
+ *       require: ['traceId'] as const,
+ *       tags: { 'payload.email': 'pii' },
+ *       description: 'User login event',
+ *     },
+ *   ),
+ * ] as const);
  * ```
  */
 export function DefineEvent<
@@ -91,11 +126,6 @@ export function DefineEvent<
  *
  * @example
  * ```typescript
- * const registry = CreateRegistry(contextSchema, [
- *   userLogin,
- *   orderCreated,
- * ] as const);
- *
  * // Access events by name
  * const loginEvent = registry.Get('user.login');
  * ```
@@ -106,10 +136,33 @@ export function CreateRegistry<
 >(
   contextSchema: ContextSchema,
   events: Events & EnforceRequiredKeys<Events, z.output<ContextSchema>>,
+): Registry<ContextSchema, Events>;
+export function CreateRegistry<
+  ContextSchema extends z.ZodObject<z.ZodRawShape>,
+  const Events extends readonly EventDefAny[],
+>(
+  contextSchema: ContextSchema,
+  events: (
+    registry: RegistryBuilder<ContextSchema>,
+  ) => Events & EnforceRequiredKeys<Events, z.output<ContextSchema>>,
+): Registry<ContextSchema, Events>;
+export function CreateRegistry<
+  ContextSchema extends z.ZodObject<z.ZodRawShape>,
+  const Events extends readonly EventDefAny[],
+>(
+  contextSchema: ContextSchema,
+  events:
+    | (Events & EnforceRequiredKeys<Events, z.output<ContextSchema>>)
+    | ((
+        registry: RegistryBuilder<ContextSchema>,
+      ) => Events & EnforceRequiredKeys<Events, z.output<ContextSchema>>),
 ): Registry<ContextSchema, Events> {
+  const registryBuilder = CreateRegistryBuilder(contextSchema);
+  const resolvedEvents =
+    typeof events === 'function' ? events(registryBuilder) : events;
   const eventsByName = {} as EventsByName<Events>;
 
-  for (const event of events) {
+  for (const event of resolvedEvents) {
     if ((eventsByName as Record<string, Events[number]>)[event.name]) {
       throw new Error(`Duplicate event name: ${event.name}`);
     }
@@ -119,9 +172,10 @@ export function CreateRegistry<
 
   return {
     contextSchema,
-    events,
+    events: resolvedEvents,
     eventsByName,
     Get: (name) => eventsByName[name],
+    DefineEvent: registryBuilder.DefineEvent,
   };
 }
 

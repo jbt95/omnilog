@@ -39,7 +39,60 @@ export type FieldTag = 'pii' | 'secret' | 'token' | 'sensitive';
  * { 'payload.email': 'pii', 'context.userId': 'pii' }
  * ```
  */
-export type TagMap = Record<string, FieldTag | readonly FieldTag[]>;
+export type TagMap = Partial<Record<string, FieldTag | readonly FieldTag[]>>;
+
+type Primitive =
+  | string
+  | number
+  | boolean
+  | bigint
+  | symbol
+  | null
+  | undefined
+  | Date;
+
+type IsPlainObject<T> = T extends Primitive
+  ? false
+  : T extends readonly unknown[]
+    ? false
+    : T extends object
+      ? true
+      : false;
+
+export type PayloadPaths<T> = T extends object
+  ? {
+      [K in keyof T & string]: IsPlainObject<NonNullable<T[K]>> extends true
+        ? `${K}` | `${K}.${PayloadPaths<NonNullable<T[K]>>}`
+        : `${K}`;
+    }[keyof T & string]
+  : never;
+
+export type PayloadTagMap<Schema extends z.ZodType> = Partial<
+  Record<`payload.${PayloadPaths<z.output<Schema>>}`, FieldTag | readonly FieldTag[]>
+>;
+
+export type RegistryEventOptions<
+  ContextSchema extends z.ZodObject<z.ZodRawShape>,
+  Schema extends z.ZodType,
+  Kind extends EventKind,
+  Require extends readonly (keyof z.output<ContextSchema> & string)[] | undefined,
+> = Omit<EventOptions<Kind, Require, TagMap | undefined>, 'require' | 'tags'> & {
+  require?: Require;
+  tags?: PayloadTagMap<Schema>;
+};
+
+export type RegistryBuilder<ContextSchema extends z.ZodObject<z.ZodRawShape>> = {
+  DefineEvent: <
+    Name extends string,
+    Schema extends z.ZodType,
+    Kind extends EventDefAny['kind'],
+    Require extends readonly (keyof z.output<ContextSchema> & string)[] | undefined,
+  >(
+    name: Name,
+    schema: Schema,
+    options: RegistryEventOptions<ContextSchema, Schema, Kind, Require>,
+  ) => EventDef<Name, Kind, Schema, Require, PayloadTagMap<Schema> | undefined>;
+};
 
 /**
  * Redaction modes for controlling field visibility
@@ -215,6 +268,8 @@ export type Registry<ContextSchema extends z.ZodObject<z.ZodRawShape>, Events ex
   eventsByName: EventsByName<Events>;
   /** Get event by name */
   Get: <Name extends keyof EventsByName<Events>>(name: Name) => EventsByName<Events>[Name];
+  /** Define event with context-aware tags */
+  DefineEvent: RegistryBuilder<ContextSchema>['DefineEvent'];
 };
 
 /**
