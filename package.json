@@ -1,5 +1,5 @@
 {
-  "name": "t-logger",
+  "name": "better-logger",
   "version": "0.1.0",
   "description": "Schema-first, type-safe structured logging and observability",
   "type": "module",
