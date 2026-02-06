@@ -7,7 +7,7 @@ import { CreateEvent } from './drain-test-helpers.js';
 
 describe('Drain.DeadLetterFile', function DrainDeadLetterFileSuite() {
   it('replays events from dead-letter file source', async function ReplaysEventsFromDeadLetterFileSource() {
-    const directory = await mkdtemp(join(tmpdir(), 't-log-drains-'));
+    const directory = await mkdtemp(join(tmpdir(), 'omnilog-drains-'));
     const deadLetterPath = join(directory, 'dead-letter.ndjson');
 
     try {

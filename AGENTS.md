@@ -1,4 +1,4 @@
-# t-log
+# OmniLog
 
 Schema-first, type-safe structured logging and observability library.
 
@@ -18,6 +18,6 @@ Schema-first, type-safe structured logging and observability library.
 
 ## API Direction
 
-- Use `TypedLogger.For(...)` as the only entry point for creating loggers.
+- Use `OmniLogger.For(...)` as the only entry point for creating loggers.
 - Do not expose `CreateLogger` from public exports.
 - Request-scoped logging must use `AsyncLocalStorage` and provide `Get()`.

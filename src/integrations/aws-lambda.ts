@@ -12,7 +12,7 @@ import type {
 } from 'aws-lambda';
 import type { z } from 'zod';
 import type { EventDefAny } from '../types.js';
-import type { LoggerFactory } from '../typed-logger.js';
+import type { LoggerFactory } from '../omni-logger.js';
 import type { LoggerInstance } from '../logger.js';
 import type { IntegrationOptions } from './integration-options.js';
 import { GetIntegrationDefaults } from './integration-options.js';

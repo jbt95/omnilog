@@ -6,12 +6,12 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { z } from 'zod';
 import type { EventDefAny } from '../types.js';
-import type { LoggerFactory } from '../typed-logger.js';
+import type { LoggerFactory } from '../omni-logger.js';
 import type { IntegrationOptions } from './integration-options.js';
 import { GetIntegrationDefaults } from './integration-options.js';
 
-const TypedlogExpressErrorCaptured = Symbol.for('t-log.express.error.captured');
-const TypedlogExpressRequestCaptured = Symbol.for('t-log.express.request.captured');
+const OmniLogExpressErrorCaptured = Symbol.for('omnilog.express.error.captured');
+const OmniLogExpressRequestCaptured = Symbol.for('omnilog.express.request.captured');
 
 type CaptureLogger = {
   CaptureError: (error: unknown, options?: { source?: string; details?: Record<string, unknown> }) => void;
@@ -58,11 +58,11 @@ function CaptureExpressError(
 
   if (error && typeof error === 'object') {
     const marker = error as Record<string | symbol, unknown>;
-    if (marker[TypedlogExpressErrorCaptured]) return;
-    marker[TypedlogExpressErrorCaptured] = true;
+    if (marker[OmniLogExpressErrorCaptured]) return;
+    marker[OmniLogExpressErrorCaptured] = true;
   }
 
-  (request as unknown as Record<string | symbol, unknown>)[TypedlogExpressRequestCaptured] = true;
+  (request as unknown as Record<string | symbol, unknown>)[OmniLogExpressRequestCaptured] = true;
 
   (candidate as CaptureLogger).CaptureError(error, {
     source: 'integration.express',
@@ -164,7 +164,7 @@ export function CreateExpressMiddleware<
           const statusCode = _res.statusCode ?? 0;
           if (statusCode < 500) return;
           const captured = (req as unknown as Record<string | symbol, unknown>)[
-            TypedlogExpressRequestCaptured
+            OmniLogExpressRequestCaptured
           ];
           if (captured) return;
           const message = ResolveErrorMessageFromResponse(responseBody, statusCode);

@@ -13,7 +13,7 @@ describe('Drain.LokiSink', function DrainLokiSinkSuite() {
       endpoint: 'https://loki.example.com/loki/api/v1/push',
       bearerToken: 'loki-token',
       tenantId: 'tenant-1',
-      labels: { app: 't-log' },
+      labels: { app: 'omnilog' },
       includeEventNameLabel: true,
       service: 'checkout-service',
       batchSize: 10,
@@ -33,7 +33,7 @@ describe('Drain.LokiSink', function DrainLokiSinkSuite() {
       streams: Array<{ stream: Record<string, string>; values: Array<[string, string]> }>;
     };
     expect(body.streams).toHaveLength(1);
-    expect(body.streams[0]?.stream.app).toBe('t-log');
+    expect(body.streams[0]?.stream.app).toBe('omnilog');
     expect(body.streams[0]?.stream.kind).toBe('log');
     expect(body.streams[0]?.stream.event).toBe('drain.loki');
     expect(body.streams[0]?.stream.service).toBe('checkout-service');
@@ -44,7 +44,7 @@ describe('Drain.LokiSink', function DrainLokiSinkSuite() {
 
     const linePayload = JSON.parse(String(firstValue?.[1] ?? '{}')) as Record<string, unknown>;
     expect(linePayload.message).toBe('drain.loki');
-    expect((linePayload.tLog as Record<string, unknown>)?.name).toBe('drain.loki');
+    expect((linePayload.omniLog as Record<string, unknown>)?.name).toBe('drain.loki');
 
     vi.unstubAllGlobals();
   });

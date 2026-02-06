@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Context, Registry, Sink, TypedLogger } from '../src/index.js';
+import { Context, Registry, Sink, OmniLogger } from '../src/index.js';
 
 describe('Logger', function LoggerSuite() {
   it('redacts tagged fields', async function RedactsTaggedFields() {
@@ -24,7 +24,7 @@ describe('Logger', function LoggerSuite() {
     );
     type Context = z.infer<typeof contextSchema>;
     const memory = Sink.Memory<Context>();
-    const loggerFactory = TypedLogger.For(registry, {
+    const loggerFactory = OmniLogger.For(registry, {
       sinks: [memory],
       policy: { redact: ['pii'] },
     });
@@ -53,7 +53,7 @@ describe('Logger', function LoggerSuite() {
           }),
         ] as const,
     );
-    const loggerFactory = TypedLogger.For(registry);
+    const loggerFactory = OmniLogger.For(registry);
     const logger = loggerFactory.Singleton();
 
     expect(() => logger.Emit('order.created', { id: 'order_1' })).toThrowError(
@@ -81,7 +81,7 @@ describe('Logger', function LoggerSuite() {
         ] as const,
     );
     const memory = Sink.Memory<Record<string, unknown>, unknown>();
-    const loggerFactory = TypedLogger.For(registry, {
+    const loggerFactory = OmniLogger.For(registry, {
       sinks: [memory],
     });
     const logger = loggerFactory.Singleton();
@@ -115,7 +115,7 @@ describe('Logger', function LoggerSuite() {
     );
     type Context = z.output<typeof contextSchema>;
     const memory = Sink.Memory<Context>();
-    const loggerFactory = TypedLogger.For(registry, { sinks: [memory] });
+    const loggerFactory = OmniLogger.For(registry, { sinks: [memory] });
     const logger = loggerFactory.Singleton();
 
     await logger.Run({ traceId: 'trace_merge' }, async () => {
@@ -144,7 +144,7 @@ describe('Logger', function LoggerSuite() {
     );
 
     const memory = Sink.Memory<{ traceId: string }>();
-    const loggerFactory = TypedLogger.For(registry, { sinks: [memory] });
+    const loggerFactory = OmniLogger.For(registry, { sinks: [memory] });
     const logger = loggerFactory.Singleton();
 
     await logger.Run({ traceId: 'trace_kind' }, async () => {
@@ -167,7 +167,7 @@ describe('Logger', function LoggerSuite() {
         ] as const,
     );
     const memory = Sink.Memory<z.output<typeof contextSchema>>();
-    const loggerFactory = TypedLogger.For(registry, {
+    const loggerFactory = OmniLogger.For(registry, {
       sinks: [memory],
       policy: {
         sample: {
@@ -195,7 +195,7 @@ describe('Logger', function LoggerSuite() {
         ] as const,
     );
     const memory = Sink.Memory<z.output<typeof contextSchema>>();
-    const loggerFactory = TypedLogger.For(registry, {
+    const loggerFactory = OmniLogger.For(registry, {
       sinks: [memory],
       policy: {
         rateLimit: {
@@ -231,7 +231,7 @@ describe('Logger', function LoggerSuite() {
         ] as const,
     );
     const memory = Sink.Memory<z.output<typeof contextSchema>>();
-    const loggerFactory = TypedLogger.For(registry, {
+    const loggerFactory = OmniLogger.For(registry, {
       sinks: [memory],
       tracing: { provider: 'opentelemetry', injectTraceContext: true },
       enrichers: [Context.Runtime(), Context.Region({ envVarNames: ['TEST_REGION'] })],
@@ -267,7 +267,7 @@ describe('Logger', function LoggerSuite() {
           }),
         ] as const,
     );
-    const loggerFactory = TypedLogger.For(registry, {
+    const loggerFactory = OmniLogger.For(registry, {
       policy: {
         piiGuard: { mode: 'block', detectors: ['email'] },
       },
@@ -296,7 +296,7 @@ describe('Logger', function LoggerSuite() {
         ] as const,
     );
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const loggerFactory = TypedLogger.For(registry);
+    const loggerFactory = OmniLogger.For(registry);
     const logger = loggerFactory.Singleton();
 
     logger.Emit('deprecated.event', { ok: true });
@@ -321,7 +321,7 @@ describe('Logger', function LoggerSuite() {
         ] as const,
     );
     const memory = Sink.Memory<z.output<typeof contextSchema>>();
-    const loggerFactory = TypedLogger.For(registry, {
+    const loggerFactory = OmniLogger.For(registry, {
       sinks: [memory],
       captureErrorsAsEvent: true,
     });
@@ -340,7 +340,7 @@ describe('Logger', function LoggerSuite() {
     );
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('t-log.internal.error');
+    expect(memory.events[0]?.name).toBe('omnilog.internal.error');
     expect(memory.events[0]?.level).toBe('error');
 
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
@@ -349,7 +349,7 @@ describe('Logger', function LoggerSuite() {
     expect(payload?.source).toBe('emit');
   });
 
-  it('uses t-log.internal.error as the default capture event name', function UsesDefaultCaptureEventName() {
+  it('uses omnilog.internal.error as the default capture event name', function UsesDefaultCaptureEventName() {
     const contextSchema = z.object({ traceId: z.string().optional() });
     const registry = Registry.Create(
       contextSchema,
@@ -361,7 +361,7 @@ describe('Logger', function LoggerSuite() {
         ] as const,
     );
     const memory = Sink.Memory<z.output<typeof contextSchema>>();
-    const loggerFactory = TypedLogger.For(registry, {
+    const loggerFactory = OmniLogger.For(registry, {
       sinks: [memory],
       captureErrorsAsEvent: { enabled: true },
     });
@@ -375,6 +375,6 @@ describe('Logger', function LoggerSuite() {
     ).toThrow();
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('t-log.internal.error');
+    expect(memory.events[0]?.name).toBe('omnilog.internal.error');
   });
 });

@@ -1,6 +1,6 @@
 /**
  * Typed logger factory for singleton and request-scoped usage
- * @module typed-logger
+ * @module omni-logger
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -42,7 +42,7 @@ export type LoggerSimulationOptions<
   policy?: LoggerOptions<z.output<ContextSchema>>['policy'];
 };
 
-export class TypedLogger {
+export class OmniLogger {
   /**
    * Simulate policy behavior for a single event without emitting it.
    *
@@ -62,7 +62,7 @@ export class TypedLogger {
     const { registry, name, payload, context, policy } = options;
     const event = registry.eventsByName[name] as EventByName<Events, Name> | undefined;
     if (!event) {
-      throw CreateDomainError('typed-logger', 'TYPED_LOGGER_UNKNOWN_EVENT', `Unknown event: ${String(name)}`, {
+      throw CreateDomainError('omni-logger', 'OMNI_LOGGER_UNKNOWN_EVENT', `Unknown event: ${String(name)}`, {
         details: { eventName: String(name) },
         resolution: 'Define the event in Registry.Create(...) before simulation.',
       });
@@ -73,7 +73,7 @@ export class TypedLogger {
     const payloadResult = event.schema.safeParse(payload);
     if (!payloadResult.success) {
       throw CreateDomainError(
-        'typed-logger',
+        'omni-logger',
         'SIMULATION_INVALID_INPUT',
         `Invalid payload for ${event.name}`,
         {
@@ -86,7 +86,7 @@ export class TypedLogger {
 
     const contextResult = registry.contextSchema.safeParse(context);
     if (!contextResult.success) {
-      throw CreateDomainError('typed-logger', 'SIMULATION_INVALID_INPUT', 'Invalid context', {
+      throw CreateDomainError('omni-logger', 'SIMULATION_INVALID_INPUT', 'Invalid context', {
         reason: contextResult.error.message,
         details: { target: 'context' },
         resolution: 'Provide context that matches the registry context schema.',
@@ -97,7 +97,7 @@ export class TypedLogger {
       for (const requiredKey of event.require) {
         if (contextResult.data[requiredKey as keyof typeof contextResult.data] === undefined) {
           throw CreateDomainError(
-            'typed-logger',
+            'omni-logger',
             'SIMULATION_INVALID_INPUT',
             `Missing required context "${String(requiredKey)}" for event ${event.name}`,
             {
@@ -167,7 +167,7 @@ export class TypedLogger {
    * Create a logger factory from an existing registry.
    *
    * This is the only logger creation entrypoint. Build your registry with
-   * `Registry.Create(...)`, then pass it to `TypedLogger.For(...)`.
+   * `Registry.Create(...)`, then pass it to `OmniLogger.For(...)`.
    *
    * @example
    * ```typescript
@@ -178,7 +178,7 @@ export class TypedLogger {
    *   }),
    * ] as const);
    *
-   * const loggerFactory = TypedLogger.For(registry, {
+   * const loggerFactory = OmniLogger.For(registry, {
    *   sinks: [Sink.Environment()],
    * });
    * ```
@@ -213,11 +213,11 @@ export class TypedLogger {
       const logger = loggerStore.getStore();
       if (!logger) {
         throw CreateDomainError(
-          'typed-logger',
-          'TYPED_LOGGER_NO_SCOPE',
+          'omni-logger',
+          'OMNI_LOGGER_NO_SCOPE',
           'No logger available in the current scope',
           {
-            resolution: 'Call TypedLogger.For(...).Scoped(...) before using Get().',
+            resolution: 'Call OmniLogger.For(...).Scoped(...) before using Get().',
           },
         );
       }

@@ -1,6 +1,6 @@
 {
   "name": "omnilog",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Schema-first, type-safe structured logging and observability",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -47,11 +47,11 @@
   "author": "Jordi Bermejo",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jbt95/typedlog.git"
+    "url": "https://github.com/jbt95/omnilog.git"
   },
-  "homepage": "https://github.com/jbt95/typedlog#readme",
+  "homepage": "https://github.com/jbt95/omnilog#readme",
   "bugs": {
-    "url": "https://github.com/jbt95/typedlog/issues"
+    "url": "https://github.com/jbt95/omnilog/issues"
   },
   "license": "MIT",
   "sideEffects": false,

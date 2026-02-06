@@ -72,7 +72,7 @@ describe('Hono E2E', function HonoE2ESuite() {
     expect(event?.context.userId).toBe('user-hono');
   });
 
-  it('returns 500 and emits t-log internal error event', async function Returns500AndEmitsInternalErrorEvent() {
+  it('returns 500 and emits omnilog internal error event', async function Returns500AndEmitsInternalErrorEvent() {
     const response = await fetch(new URL('/boom', baseUrl), {
       headers: {
         'x-request-id': 'req-hono-boom',
@@ -81,7 +81,7 @@ describe('Hono E2E', function HonoE2ESuite() {
 
     expect(response.status).toBe(500);
 
-    const errorEvent = memory.events.find((candidate) => candidate.name === 't-log.internal.error');
+    const errorEvent = memory.events.find((candidate) => candidate.name === 'omnilog.internal.error');
     expect(errorEvent).toBeDefined();
     const payload = errorEvent?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.hono');

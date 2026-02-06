@@ -144,7 +144,7 @@ export function CreateStructuredSink<Context = unknown, Payload = unknown>(): Si
  * Captures events in memory for assertions:
  * ```typescript
  * const memory = CreateMemorySink();
- * const loggerFactory = TypedLogger.For(registry, { sinks: [memory] });
+ * const loggerFactory = OmniLogger.For(registry, { sinks: [memory] });
  * const logger = loggerFactory.Singleton();
  *
  * logger.Emit('user.login', { userId: '123' });

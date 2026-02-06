@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { Registry, Sink, TypedLogger } from '../src/index.js';
+import { Registry, Sink, OmniLogger } from '../src/index.js';
 
-describe('TypedLogger', function TypedLoggerSuite() {
+describe('OmniLogger', function OmniLoggerSuite() {
   it('provides scoped logger via factory', async function ProvidesScopedLoggerViaFactory() {
     const contextSchema = z.object({ traceId: z.string() });
     const registry = Registry.Create(
@@ -16,7 +16,7 @@ describe('TypedLogger', function TypedLoggerSuite() {
         ] as const,
     );
     const memory = Sink.Memory<{ traceId: string }>();
-    const loggerFactory = TypedLogger.For(registry, { sinks: [memory] });
+    const loggerFactory = OmniLogger.For(registry, { sinks: [memory] });
 
     await loggerFactory.Scoped({ traceId: 'trace_factory' }, (logger) => {
       logger.Emit('user.logged', { id: 'user_1' });
@@ -38,12 +38,12 @@ describe('TypedLogger', function TypedLoggerSuite() {
           }),
         ] as const,
     );
-    const loggerFactory = TypedLogger.For(registry);
+    const loggerFactory = OmniLogger.For(registry);
 
     expect(() => loggerFactory.Get()).toThrowError(
       expect.objectContaining({
-        code: 'TYPED_LOGGER_NO_SCOPE',
-        domain: 'typed-logger',
+        code: 'OMNI_LOGGER_NO_SCOPE',
+        domain: 'omni-logger',
       }),
     );
   });
@@ -61,7 +61,7 @@ describe('TypedLogger', function TypedLoggerSuite() {
         ] as const,
     );
     const memory = Sink.Memory<{ traceId: string }>();
-    const loggerFactory = TypedLogger.For(registry, { sinks: [memory] });
+    const loggerFactory = OmniLogger.For(registry, { sinks: [memory] });
 
     await loggerFactory.Scoped({ traceId: 'trace_get' }, (_logger) => {
       const loggerFromGet = loggerFactory.Get();
@@ -85,7 +85,7 @@ describe('TypedLogger', function TypedLoggerSuite() {
         ] as const,
     );
     const memory = Sink.Memory<{ traceId: string }>();
-    const loggerFactory = TypedLogger.For(registry, { sinks: [memory] });
+    const loggerFactory = OmniLogger.For(registry, { sinks: [memory] });
     const loggerA = loggerFactory.Singleton();
     const loggerB = loggerFactory.Singleton();
 
@@ -112,7 +112,7 @@ describe('TypedLogger', function TypedLoggerSuite() {
         ] as const,
     );
 
-    const simulation = TypedLogger.Simulate({
+    const simulation = OmniLogger.Simulate({
       registry,
       name: 'simulate.event',
       context: { traceId: 'trace_simulate' },
@@ -136,7 +136,7 @@ describe('TypedLogger', function TypedLoggerSuite() {
         ] as const,
     );
     const memory = Sink.Memory<{ traceId: string }>();
-    const loggerFactory = TypedLogger.For(registry, {
+    const loggerFactory = OmniLogger.For(registry, {
       sinks: [memory],
       policy: {
         rateLimit: {
@@ -169,7 +169,7 @@ describe('TypedLogger', function TypedLoggerSuite() {
     );
 
     expect(() =>
-      TypedLogger.Simulate({
+      OmniLogger.Simulate({
         registry,
         name: 'simulate.invalid',
         context: {} as unknown as { traceId: string },
@@ -178,7 +178,7 @@ describe('TypedLogger', function TypedLoggerSuite() {
     ).toThrowError(
       expect.objectContaining({
         code: 'SIMULATION_INVALID_INPUT',
-        domain: 'typed-logger',
+        domain: 'omni-logger',
       }),
     );
   });

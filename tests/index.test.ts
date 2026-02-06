@@ -9,13 +9,13 @@ import {
   Registry,
   Sink,
   TypedLogModule,
-  TypedLogger,
+  OmniLogger,
 } from '../src/index.js';
 
 describe('Index Exports', function IndexExportsSuite() {
   it('exposes core API', function ExposesCoreApi() {
-    expect(typeof TypedLogger.For).toBe('function');
-    expect(typeof TypedLogger.Simulate).toBe('function');
+    expect(typeof OmniLogger.For).toBe('function');
+    expect(typeof OmniLogger.Simulate).toBe('function');
     expect(typeof Registry.Create).toBe('function');
     expect(typeof Registry.Export).toBe('function');
     expect(typeof Registry.Compare).toBe('function');

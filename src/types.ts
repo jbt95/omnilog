@@ -1,5 +1,5 @@
 /**
- * Core type definitions for t-log
+ * Core type definitions for OmniLog
  * @module types
  */
 
@@ -11,7 +11,7 @@ import type { z } from 'zod';
 export type AnyZodSchema = z.ZodType<any, any, any>;
 
 /**
- * Event kinds supported by t-log
+ * Event kinds supported by OmniLog
  * - `log`: General log events
  * - `metric`: Metrics and measurements
  * - `span`: Distributed tracing spans
@@ -484,12 +484,12 @@ export type EventDefExport = {
 };
 
 /**
- * Error domains emitted by t-log.
+ * Error domains emitted by OmniLog.
  */
 export type ErrorDomain =
   | 'registry'
   | 'logger'
-  | 'typed-logger'
+  | 'omni-logger'
   | 'context'
   | 'framework'
   | 'drain'
@@ -497,7 +497,7 @@ export type ErrorDomain =
   | 'unknown';
 
 /**
- * Stable error codes emitted by t-log.
+ * Stable error codes emitted by OmniLog.
  */
 export type ErrorCode =
   | 'REGISTRY_DUPLICATE_EVENT'
@@ -507,8 +507,8 @@ export type ErrorCode =
   | 'LOGGER_MISSING_REQUIRED_CONTEXT'
   | 'LOGGER_RATE_LIMIT_EXCEEDED'
   | 'LOGGER_PII_GUARD_BLOCKED'
-  | 'TYPED_LOGGER_NO_SCOPE'
-  | 'TYPED_LOGGER_UNKNOWN_EVENT'
+  | 'OMNI_LOGGER_NO_SCOPE'
+  | 'OMNI_LOGGER_UNKNOWN_EVENT'
   | 'SIMULATION_INVALID_INPUT'
   | 'CONTEXT_INVALID'
   | 'DRAIN_HTTP_FAILURE'
@@ -622,7 +622,7 @@ export type DrainTelemetryEvent = {
 export type DrainTelemetryConfig = {
   /** Sink receiving telemetry metrics */
   sink: Sink<DrainTelemetryEvent>;
-  /** Optional metric prefix (default: 't-log.drain') */
+  /** Optional metric prefix (default: 'omnilog.drain') */
   prefix?: string;
   /** Static tags attached to every metric */
   tags?: Record<string, string>;

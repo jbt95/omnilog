@@ -54,7 +54,7 @@ function CreateLokiStreams(
     const line = JSON.stringify({
       message: event.name,
       ...(event.level ? { level: event.level } : {}),
-      tLog: event,
+      omniLog: event,
     });
     const value: [string, string] = [CreateNanosecondsTimestamp(event.ts), line];
 

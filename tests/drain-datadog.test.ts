@@ -33,9 +33,9 @@ describe('Drain.DatadogSink', function DrainDatadogSinkSuite() {
     expect(body[0]?.message).toBe('drain.datadog');
     expect(body[0]?.service).toBe('checkout-service');
     expect(body[0]?.hostname).toBe('checkout-host');
-    expect(body[0]?.ddsource).toBe('t-log');
+    expect(body[0]?.ddsource).toBe('omnilog');
     expect(body[0]?.ddtags).toBe('env:test,team:core');
-    expect((body[0]?.tLog as Record<string, unknown>)?.name).toBe('drain.datadog');
+    expect((body[0]?.omniLog as Record<string, unknown>)?.name).toBe('drain.datadog');
 
     vi.unstubAllGlobals();
   });

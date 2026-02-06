@@ -26,7 +26,7 @@ export function CreateOTLPDrain(config: DrainConfig): Drain {
         body: JSON.stringify({
           resourceLogs: events.map((event) => ({
             resource: {
-              attributes: [{ key: 'service.name', value: { stringValue: 't-log' } }],
+              attributes: [{ key: 'service.name', value: { stringValue: 'omnilog' } }],
             },
             scopeLogs: [
               {

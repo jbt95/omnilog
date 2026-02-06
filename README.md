@@ -1,4 +1,4 @@
-# t-log
+# OmniLog
 
 Schema-first, type-safe structured logging and observability for TypeScript.
 
@@ -13,7 +13,7 @@ Schema-first, type-safe structured logging and observability for TypeScript.
 - Granular typed errors with stable `code` and `domain` values
 - Event-level governance with redaction and PII guardrails
 - Dynamic sampling and per-event rate limiting
-- Automatic exception capture in framework integrations (`t-log.internal.error`)
+- Automatic exception capture in framework integrations (`omnilog.internal.error`)
 - Manual service-level exception capture with `logger.CaptureError(...)`
 - Typed drain handles with retry, backpressure, telemetry, and dead-letter support
 - Provider-native drains for Axiom, OTLP, Webhook, Datadog, Loki, and Better Stack
@@ -26,7 +26,7 @@ Schema-first, type-safe structured logging and observability for TypeScript.
 ## Installation
 
 ```bash
-npm install t-log zod
+npm install omnilog zod
 ```
 
 ### Requirements
@@ -37,7 +37,7 @@ npm install t-log zod
 
 ```typescript
 import { z } from 'zod';
-import { Registry, Sink, TypedLogger } from 't-log';
+import { Registry, Sink, OmniLogger } from 'omnilog';
 
 const contextSchema = z.object({
   traceId: z.string(),
@@ -60,7 +60,7 @@ const registry = Registry.Create(
     ] as const,
 );
 
-const loggerFactory = TypedLogger.For(registry, {
+const loggerFactory = OmniLogger.For(registry, {
   sinks: [Sink.Environment()],
   policy: { redact: ['pii'] },
 });
@@ -100,7 +100,7 @@ await loggerFactory.Scoped({ traceId: 'req_1' }, (logger) => {
 
 ```typescript
 const memory = Sink.Memory<{ traceId: string }>();
-const loggerFactory = TypedLogger.For(registry, { sinks: [memory] });
+const loggerFactory = OmniLogger.For(registry, { sinks: [memory] });
 
 await loggerFactory.Scoped({ traceId: 'test' }, (logger) => {
   logger.Emit('user.signed_in', { email: 'test@example.com', ip: '127.0.0.1' });
@@ -115,11 +115,11 @@ Drains send batches of events to external systems. Use them as sinks on the logg
 `Emit` is synchronous; drains handle async delivery. Call `Flush()` (or wrap with `Context.AutoFlush`) before shutdown when you need guarantees.
 
 ```typescript
-import { Drain } from 't-log';
+import { Drain } from 'omnilog';
 
 const drain = Drain.AxiomSink({ dataset: 'app', batchSize: 100, flushInterval: 5000 });
 
-const loggerFactory = TypedLogger.For(registry, {
+const loggerFactory = OmniLogger.For(registry, {
   sinks: [drain.Sink],
 });
 
@@ -172,7 +172,7 @@ const betterStackDrain = Drain.BetterStackSink({
 Use the same sink-handle shape for all providers:
 
 ```typescript
-const loggerFactory = TypedLogger.For(registry, { sinks: [datadogDrain.Sink] });
+const loggerFactory = OmniLogger.For(registry, { sinks: [datadogDrain.Sink] });
 await datadogDrain.Flush();
 ```
 
@@ -188,7 +188,7 @@ console.log(replay); // { replayed, failed }
 ## Sampling and Rate Limits
 
 ```typescript
-const loggerFactory = TypedLogger.For(registry, {
+const loggerFactory = OmniLogger.For(registry, {
   sinks: [drain.Sink],
   policy: {
     sample: {
@@ -206,7 +206,7 @@ const loggerFactory = TypedLogger.For(registry, {
 ## Context Enrichers and Tracing
 
 ```typescript
-const loggerFactory = TypedLogger.For(registry, {
+const loggerFactory = OmniLogger.For(registry, {
   sinks: [drain.Sink],
   tracing: { provider: 'opentelemetry', injectTraceContext: true },
   enrichers: [
@@ -220,14 +220,14 @@ const loggerFactory = TypedLogger.For(registry, {
 ## PII Guard and Simulation
 
 ```typescript
-const loggerFactory = TypedLogger.For(registry, {
+const loggerFactory = OmniLogger.For(registry, {
   sinks: [drain.Sink],
   policy: {
     piiGuard: { mode: 'warn', detectors: ['email', 'phone'], requireTags: true },
   },
 });
 
-const simulation = TypedLogger.Simulate({
+const simulation = OmniLogger.Simulate({
   registry,
   name: 'user.signed_in',
   context: { traceId: 'trace_1' },
@@ -248,10 +248,10 @@ if (!report.compatible) {
 
 ## Errors
 
-t-log exposes structured errors with stable `code` and `domain` values.
+OmniLog exposes structured errors with stable `code` and `domain` values.
 
 ```typescript
-import { Error as LogError } from 't-log';
+import { Error as LogError } from 'omnilog';
 
 try {
   logger.Emit('user.signed_in', payload);
@@ -264,11 +264,11 @@ try {
 You can also emit internal error events automatically:
 
 ```typescript
-const loggerFactory = TypedLogger.For(registry, {
+const loggerFactory = OmniLogger.For(registry, {
   sinks: [drain.Sink],
   captureErrorsAsEvent: {
     enabled: true,
-    eventName: 't-log.internal.error',
+    eventName: 'omnilog.internal.error',
     level: 'error',
   },
 });
@@ -293,8 +293,8 @@ await loggerFactory.Scoped({ traceId: 'req-1' }, async (logger) => {
 ```typescript
 throw LogError.Create({
   message: 'Missing request context',
-  code: 'TYPED_LOGGER_NO_SCOPE',
-  domain: 'typed-logger',
+  code: 'OMNI_LOGGER_NO_SCOPE',
+  domain: 'omni-logger',
   resolution: 'Wrap your code inside loggerFactory.Scoped(...)',
 });
 ```
@@ -309,7 +309,7 @@ throw LogError.Create({
 | `LOGGER_MISSING_REQUIRED_CONTEXT` | `logger` | Required context key is missing |
 | `LOGGER_PII_GUARD_BLOCKED` | `logger` | PII guard blocked emission |
 | `LOGGER_RATE_LIMIT_EXCEEDED` | `logger` | Rate limit exceeded and `onLimit: 'throw'` |
-| `TYPED_LOGGER_NO_SCOPE` | `typed-logger` | `Get()` was called outside `Scoped(...)` |
+| `OMNI_LOGGER_NO_SCOPE` | `omni-logger` | `Get()` was called outside `Scoped(...)` |
 | `REGISTRY_DUPLICATE_EVENT` | `registry` | Two events share the same name |
 | `DRAIN_HTTP_FAILURE` | `drain` | Drain provider returned non-2xx response |
 | `DRAIN_TIMEOUT` | `drain` | Drain send attempt timed out |
@@ -317,26 +317,26 @@ throw LogError.Create({
 ## Integrations
 
 Integrations use official framework types. Install the corresponding packages to get full typing support.
-`Middleware.Express`, `Middleware.Hono`, `Handler.Lambda`, `Handler.Worker`, and `TypedLogModule` handlers automatically catch thrown user errors, emit `t-log.internal.error`, and then rethrow the original error.
+`Middleware.Express`, `Middleware.Hono`, `Handler.Lambda`, `Handler.Worker`, and `TypedLogModule` handlers automatically catch thrown user errors, emit `omnilog.internal.error`, and then rethrow the original error.
 
 ### Automatic Exception Capture
 
 Framework integrations now capture exceptions thrown by user handlers/middleware, emit an internal event, and rethrow the original error.
 
 ```typescript
-const loggerFactory = TypedLogger.For(registry, {
+const loggerFactory = OmniLogger.For(registry, {
   sinks: [drain.Sink],
 });
 
 // On thrown user errors, integrations emit:
-// event name: "t-log.internal.error"
+// event name: "omnilog.internal.error"
 // payload includes: message, code, domain, source, stack
 ```
 
 ### Express
 
 ```typescript
-import { Middleware } from 't-log';
+import { Middleware } from 'omnilog';
 
 app.use(
   Middleware.Express(loggerFactory, {
@@ -347,14 +347,14 @@ app.use(
 
 app.get('/orders/:id', (req, res) => {
   throw new Error('Database unavailable');
-  // The middleware captures and emits t-log.internal.error, then rethrows.
+  // The middleware captures and emits omnilog.internal.error, then rethrows.
 });
 ```
 
 ### Hono
 
 ```typescript
-import { Middleware } from 't-log';
+import { Middleware } from 'omnilog';
 
 app.use(
   Middleware.Hono(loggerFactory, {
@@ -368,7 +368,7 @@ app.use(
 
 ```typescript
 import { Module } from '@nestjs/common';
-import { TypedLogModule } from 't-log';
+import { TypedLogModule } from 'omnilog';
 
 @Module({
   imports: [
@@ -385,14 +385,14 @@ export class AppModule {}
 ### AWS Lambda
 
 ```typescript
-import { Handler } from 't-log';
+import { Handler } from 'omnilog';
 
 export const handler = Handler.Lambda(loggerFactory, async (event, context, logger) => {
   logger.Emit('lambda.invoke', { path: event.rawPath });
   if (!event.rawPath) throw new Error('Missing rawPath');
   return { statusCode: 200, body: 'ok' };
 });
-// Handler.Lambda captures thrown errors as t-log.internal.error and rethrows.
+// Handler.Lambda captures thrown errors as omnilog.internal.error and rethrows.
 ```
 
 ### Cloudflare Workers
@@ -400,7 +400,7 @@ export const handler = Handler.Lambda(loggerFactory, async (event, context, logg
 Workers require `nodejs_compat` to use `AsyncLocalStorage`.
 
 ```typescript
-import { Handler } from 't-log';
+import { Handler } from 'omnilog';
 
 export default {
   fetch: Handler.Worker(loggerFactory, async (request, env, ctx, logger) => {
@@ -415,11 +415,11 @@ export default {
 - `Registry.Create(contextSchema, (registry) => events)`
 - `registry.DefineEvent(name, schema, options)`
 - `Registry.SchemaFingerprint(schema)`
-- `TypedLogger.For(registry, options)`
-- `TypedLogger.For(...).Scoped(context, (logger) => fn)`
-- `TypedLogger.For(...).Get()`
+- `OmniLogger.For(registry, options)`
+- `OmniLogger.For(...).Scoped(context, (logger) => fn)`
+- `OmniLogger.For(...).Get()`
 - `logger.CaptureError(error, { source, details })`
-- `TypedLogger.Simulate(...)`
+- `OmniLogger.Simulate(...)`
 - `Sink.Environment()`
 - `Sink.Memory()`
 - `Sink.Visual()`, `Sink.Structured()`

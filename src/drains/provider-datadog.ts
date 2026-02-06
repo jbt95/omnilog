@@ -47,10 +47,10 @@ export function CreateDatadogDrain(config: DatadogDrainConfig): Drain {
       ...(service ? { service } : {}),
       ...(host ? { hostname: host } : {}),
       status: event.level ?? 'info',
-      ddsource: 't-log',
+      ddsource: 'omnilog',
       timestamp: event.ts,
       ...(datadogTags ? { ddtags: datadogTags } : {}),
-      tLog: event,
+      omniLog: event,
     }));
 
     try {

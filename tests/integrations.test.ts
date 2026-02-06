@@ -8,9 +8,9 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import type { ExecutionContext as WorkerExecutionContext } from '@cloudflare/workers-types';
 import type { Observable } from 'rxjs';
 import { firstValueFrom, of, throwError } from 'rxjs';
-import { Handler, Middleware, Registry, Sink, TypedLogModule, TypedLogger } from '../src/index.js';
+import { Handler, Middleware, Registry, Sink, TypedLogModule, OmniLogger } from '../src/index.js';
 
-function CreateTestLoggerFactory() {
+function CreateTesomniLoggerFactory() {
   const contextSchema = z.object({
     method: z.string().optional(),
     path: z.string().optional(),
@@ -30,7 +30,7 @@ function CreateTestLoggerFactory() {
         }),
       ] as const,
   );
-  const loggerFactory = TypedLogger.For(registry, {
+  const loggerFactory = OmniLogger.For(registry, {
     sinks: [memory],
   });
 
@@ -39,7 +39,7 @@ function CreateTestLoggerFactory() {
 
 describe('Integrations', function IntegrationsSuite() {
   it('express middleware scopes and attaches logger', async function ExpressMiddlewareScopesAndAttachesLogger() {
-    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const { loggerFactory, memory } = CreateTesomniLoggerFactory();
     const middleware = Middleware.Express(loggerFactory);
 
     const req = {
@@ -73,7 +73,7 @@ describe('Integrations', function IntegrationsSuite() {
   });
 
   it('hono middleware scopes and attaches logger', async function HonoMiddlewareScopesAndAttachesLogger() {
-    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const { loggerFactory, memory } = CreateTesomniLoggerFactory();
     const middleware = Middleware.Hono(loggerFactory);
     const store = new Map<string, unknown>();
     const context = {
@@ -100,7 +100,7 @@ describe('Integrations', function IntegrationsSuite() {
   });
 
   it('lambda handler passes logger and context', async function LambdaHandlerPassesLoggerAndContext() {
-    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const { loggerFactory, memory } = CreateTesomniLoggerFactory();
     const handler = Handler.Lambda(loggerFactory, async (_event, _context, logger) => {
       logger.Emit('integration.event', { ok: true });
       return { statusCode: 200, body: 'ok' };
@@ -124,7 +124,7 @@ describe('Integrations', function IntegrationsSuite() {
   });
 
   it('worker handler passes logger and context', async function WorkerHandlerPassesLoggerAndContext() {
-    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const { loggerFactory, memory } = CreateTesomniLoggerFactory();
     const handler = Handler.Worker(loggerFactory, async (_request, _env, _ctx, logger) => {
       logger.Emit('integration.event', { ok: true });
       return new Response('ok');
@@ -150,7 +150,7 @@ describe('Integrations', function IntegrationsSuite() {
   });
 
   it('nestjs module interceptor scopes and attaches logger', async function NestModuleInterceptorScopesAndAttachesLogger() {
-    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const { loggerFactory, memory } = CreateTesomniLoggerFactory();
     const moduleDefinition = TypedLogModule.forRoot({ loggerFactory });
     const providers = (moduleDefinition.providers ?? []) as Provider[];
     const interceptorProvider = providers.find((provider): provider is ValueProvider => {
@@ -193,7 +193,7 @@ describe('Integrations', function IntegrationsSuite() {
   });
 
   it('express middleware captures thrown user errors as internal events', async function ExpressMiddlewareCapturesThrownUserErrorsAsInternalEvents() {
-    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const { loggerFactory, memory } = CreateTesomniLoggerFactory();
     const middleware = Middleware.Express(loggerFactory);
     const req = {
       method: 'GET',
@@ -212,14 +212,14 @@ describe('Integrations', function IntegrationsSuite() {
     ).toThrow('express boom');
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('t-log.internal.error');
+    expect(memory.events[0]?.name).toBe('omnilog.internal.error');
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.express');
     expect(payload?.message).toBe('express boom');
   });
 
   it('hono middleware captures thrown user errors as internal events', async function HonoMiddlewareCapturesThrownUserErrorsAsInternalEvents() {
-    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const { loggerFactory, memory } = CreateTesomniLoggerFactory();
     const middleware = Middleware.Hono(loggerFactory);
     const context = {
       req: {
@@ -241,14 +241,14 @@ describe('Integrations', function IntegrationsSuite() {
     ).rejects.toThrow('hono boom');
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('t-log.internal.error');
+    expect(memory.events[0]?.name).toBe('omnilog.internal.error');
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.hono');
     expect(payload?.message).toBe('hono boom');
   });
 
   it('lambda handler captures thrown user errors as internal events', async function LambdaHandlerCapturesThrownUserErrorsAsInternalEvents() {
-    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const { loggerFactory, memory } = CreateTesomniLoggerFactory();
     const handler = Handler.Lambda(loggerFactory, async () => {
       throw new Error('lambda boom');
     });
@@ -266,14 +266,14 @@ describe('Integrations', function IntegrationsSuite() {
     );
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('t-log.internal.error');
+    expect(memory.events[0]?.name).toBe('omnilog.internal.error');
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.lambda');
     expect(payload?.message).toBe('lambda boom');
   });
 
   it('worker handler captures thrown user errors as internal events', async function WorkerHandlerCapturesThrownUserErrorsAsInternalEvents() {
-    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const { loggerFactory, memory } = CreateTesomniLoggerFactory();
     const handler = Handler.Worker(loggerFactory, async () => {
       throw new Error('worker boom');
     });
@@ -286,14 +286,14 @@ describe('Integrations', function IntegrationsSuite() {
     await expect(handler(request, {}, ctx)).rejects.toThrow('worker boom');
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('t-log.internal.error');
+    expect(memory.events[0]?.name).toBe('omnilog.internal.error');
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.worker');
     expect(payload?.message).toBe('worker boom');
   });
 
   it('nestjs interceptor captures thrown user errors as internal events', async function NestjsInterceptorCapturesThrownUserErrorsAsInternalEvents() {
-    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const { loggerFactory, memory } = CreateTesomniLoggerFactory();
     const moduleDefinition = TypedLogModule.forRoot({ loggerFactory });
     const providers = (moduleDefinition.providers ?? []) as Provider[];
     const interceptorProvider = providers.find((provider): provider is ValueProvider => {
@@ -328,7 +328,7 @@ describe('Integrations', function IntegrationsSuite() {
     ).rejects.toThrow('nest boom');
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('t-log.internal.error');
+    expect(memory.events[0]?.name).toBe('omnilog.internal.error');
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.nestjs');
     expect(payload?.message).toBe('nest boom');

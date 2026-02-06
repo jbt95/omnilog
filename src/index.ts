@@ -1,7 +1,7 @@
 /**
  * @packageDocumentation
  *
- * # t-log
+ * # OmniLog
  *
  * Schema-first, type-safe structured logging and observability for TypeScript.
  *
@@ -20,7 +20,7 @@
  *
  * ```typescript
  * import { z } from 'zod';
- * import { TypedLogger, Registry, Sink } from 't-log';
+ * import { OmniLogger, Registry, Sink } from 'omnilog';
  *
  * // Define your context schema
  * const contextSchema = z.object({
@@ -37,7 +37,7 @@
  *   }),
  * ] as const);
  *
- * const loggerFactory = TypedLogger.For(registry, {
+ * const loggerFactory = OmniLogger.For(registry, {
  *   sinks: [Sink.Environment()],
  *   policy: { redact: ['pii'] },
  * });
@@ -142,7 +142,7 @@ export class Handler {
   static Worker: typeof CreateWorkerHandler = CreateWorkerHandler;
 }
 
-export { TypedLogger } from './typed-logger.js';
+export { OmniLogger } from './omni-logger.js';
 export { TypedLogModule } from './integrations/nestjs.js';
 
 export type {
@@ -201,6 +201,6 @@ export type {
   MemorySink,
 } from './types.js';
 
-export type { LoggerFactory, LoggerSimulationOptions } from './typed-logger.js';
+export type { LoggerFactory, LoggerSimulationOptions } from './omni-logger.js';
 export type { IntegrationOptions } from './integrations/integration-options.js';
 export type { TypedLogModuleOptions } from './integrations/nestjs.js';

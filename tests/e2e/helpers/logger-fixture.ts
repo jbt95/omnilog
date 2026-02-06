@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Registry, Sink, TypedLogger } from '../../../src/index.js';
+import { Registry, Sink, OmniLogger } from '../../../src/index.js';
 
 export function CreateLoggerFixture() {
   const contextSchema = z.object({
@@ -24,11 +24,11 @@ export function CreateLoggerFixture() {
   );
 
   const memory = Sink.Memory<Context>();
-  const loggerFactory = TypedLogger.For(registry, {
+  const loggerFactory = OmniLogger.For(registry, {
     sinks: [memory],
     captureErrorsAsEvent: {
       enabled: true,
-      eventName: 't-log.internal.error',
+      eventName: 'omnilog.internal.error',
       level: 'error',
     },
   });
