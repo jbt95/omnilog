@@ -20,6 +20,7 @@ Schema-first, type-safe structured logging and observability for TypeScript.
 - Dead-letter replay tooling for recovery workflows
 - Context enrichers and trace correlation support
 - Official integrations for Express, Hono, NestJS, AWS Lambda, and Cloudflare Workers
+- Real-server e2e suites for Express, Hono, and NestJS
 - Memory sink and policy simulation for testing
 
 ## Installation
@@ -433,11 +434,18 @@ export default {
 - `Handler.Lambda()`, `Handler.Worker()`
 - `TypedLogModule.forRoot(...)`
 
+## Testing
+
+- `pnpm test` runs unit/integration tests (fast feedback, includes non-runtime integration tests).
+- `pnpm test:e2e` runs real-server e2e tests for Express, Hono, and NestJS using real HTTP requests.
+- `pnpm test:all` runs both suites.
+- `pnpm run typecheck` validates TypeScript types.
+
+Lambda and Cloudflare Worker integrations are covered with non-server integration tests because they are different runtime models.
+
 ## Development Notes
 
 - Drain tests are organized per provider in `tests/drain-*.test.ts`.
-- Run `pnpm test` to execute the full suite.
-- Run `pnpm run typecheck` before shipping changes.
 
 ## License
 

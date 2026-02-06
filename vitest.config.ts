@@ -1,7 +1,1 @@
-import { defineConfig } from 'vitest/config';
-
-export default defineConfig({
-  test: {
-    include: ['tests/**/*.test.ts'],
-  },
-});
+export { default } from './vitest.unit.config.js';

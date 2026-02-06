@@ -27,8 +27,10 @@
     "build": "tsup",
     "build:types": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --config vitest.unit.config.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:all": "pnpm test && pnpm run test:e2e",
+    "test:watch": "vitest --config vitest.unit.config.ts",
     "format": "prettier . --write",
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run build"
@@ -87,8 +89,11 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "*",
+    "@hono/node-server": "^1.19.9",
     "@nestjs/common": "*",
     "@nestjs/core": "*",
+    "@nestjs/platform-express": "^11.1.13",
+    "@nestjs/testing": "^11.1.13",
     "@tsconfig/node20": "^20.1.9",
     "@types/aws-lambda": "*",
     "@types/express": "*",
@@ -96,6 +101,8 @@
     "express": "*",
     "hono": "*",
     "prettier": "^3.4.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
     "tsup": "^8.5.1",
     "typescript": "^5.7.0",
     "vitest": "^2.0.0"

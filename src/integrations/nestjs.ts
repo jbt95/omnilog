@@ -11,6 +11,7 @@ import type {
   NestInterceptor,
   Provider,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
 import type { Request } from 'express';
 import type { z } from 'zod';
 import type { EventDefAny } from '../types.js';
@@ -75,14 +76,12 @@ class TypedLogInterceptor<
     const loggerKey = defaults.LoggerKey;
     const mergedContext = BuildContext(request, this.options) as z.output<ContextSchema>;
 
-    return this.loggerFactory.Scoped(mergedContext, (logger) => {
-      (request as unknown as Record<string, unknown>)[loggerKey] = logger as LoggerInstance<
-        ContextSchema,
-        Events
-      >;
-      try {
-        return next.handle();
-      } catch (error) {
+    return new Observable((subscriber) => {
+      let dispose: (() => void) | void;
+      const CaptureError = (
+        logger: LoggerInstance<ContextSchema, Events>,
+        error: unknown,
+      ): void => {
         logger.CaptureError(error, {
           source: 'integration.nestjs',
           details: {
@@ -91,8 +90,46 @@ class TypedLogInterceptor<
             requestId: ResolveHeader(request, 'x-request-id'),
           },
         });
-        throw error;
+      };
+
+      try {
+        dispose = this.loggerFactory.Scoped(mergedContext, (logger) => {
+          (request as unknown as Record<string, unknown>)[loggerKey] = logger as LoggerInstance<
+            ContextSchema,
+            Events
+          >;
+
+          let stream: ReturnType<CallHandler['handle']>;
+          try {
+            stream = next.handle();
+          } catch (error) {
+            CaptureError(logger, error);
+            subscriber.error(error);
+            return;
+          }
+
+          const subscription = (stream as Observable<unknown>).subscribe({
+            next: (value) => subscriber.next(value),
+            error: (error) => {
+              CaptureError(logger, error);
+              subscriber.error(error);
+            },
+            complete: () => subscriber.complete(),
+          });
+
+          return () => {
+            subscription.unsubscribe();
+          };
+        }) as (() => void) | void;
+      } catch (error) {
+        subscriber.error(error);
       }
+
+      return () => {
+        if (typeof dispose === 'function') {
+          dispose();
+        }
+      };
     }) as ReturnType<CallHandler['handle']>;
   }
 }

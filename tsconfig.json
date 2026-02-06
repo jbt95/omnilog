@@ -12,7 +12,16 @@
     "noEmit": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
   },
-  "include": ["src", "tests", "examples", "vitest.config.ts"]
+  "include": [
+    "src",
+    "tests",
+    "examples",
+    "vitest.config.ts",
+    "vitest.unit.config.ts",
+    "vitest.e2e.config.ts"
+  ]
 }

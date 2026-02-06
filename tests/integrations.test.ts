@@ -6,6 +6,8 @@ import type { APIGatewayProxyEventV2, Context as LambdaContext } from 'aws-lambd
 import type { ExecutionContext, Provider, ValueProvider } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import type { ExecutionContext as WorkerExecutionContext } from '@cloudflare/workers-types';
+import type { Observable } from 'rxjs';
+import { firstValueFrom, of, throwError } from 'rxjs';
 import { Handler, Middleware, Registry, Sink, TypedLogModule, TypedLogger } from '../src/index.js';
 
 function CreateTestLoggerFactory() {
@@ -169,17 +171,19 @@ describe('Integrations', function IntegrationsSuite() {
       header: (name: string) => (name === 'x-request-id' ? 'req-nest' : undefined),
     } as unknown as Request;
 
-    const result = await interceptor.intercept(
-      { switchToHttp: () => ({ getRequest: () => request }) } as ExecutionContext,
-      {
-        handle: () => {
-          const logger = (request as unknown as Record<string, unknown>).logger as {
-            Emit: (name: string, payload: { ok: boolean }) => void;
-          };
-          logger.Emit('integration.event', { ok: true });
-          return 'ok';
+    const result = await firstValueFrom(
+      interceptor.intercept(
+        { switchToHttp: () => ({ getRequest: () => request }) } as ExecutionContext,
+        {
+          handle: () => {
+            const logger = (request as unknown as Record<string, unknown>).logger as {
+              Emit: (name: string, payload: { ok: boolean }) => void;
+            };
+            logger.Emit('integration.event', { ok: true });
+            return of('ok');
+          },
         },
-      },
+      ) as Observable<string>,
     );
 
     expect(result).toBe('ok');
@@ -310,16 +314,18 @@ describe('Integrations', function IntegrationsSuite() {
       header: () => undefined,
     } as unknown as Request;
 
-    expect(() =>
+    await expect(
+      firstValueFrom(
       interceptor.intercept(
         { switchToHttp: () => ({ getRequest: () => request }) } as ExecutionContext,
         {
           handle: () => {
-            throw new Error('nest boom');
+            return throwError(() => new Error('nest boom'));
           },
         },
+      ) as Observable<unknown>,
       ),
-    ).toThrow('nest boom');
+    ).rejects.toThrow('nest boom');
 
     expect(memory.events).toHaveLength(1);
     expect(memory.events[0]?.name).toBe('typedlog.internal.error');
