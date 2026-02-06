@@ -33,7 +33,7 @@
     "test:watch": "vitest --config vitest.unit.config.ts",
     "format": "prettier . --write",
     "lint": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "pnpm run typecheck && pnpm test && pnpm run build"
   },
   "keywords": [
     "logging",
@@ -44,7 +44,15 @@
     "zod",
     "type-safe"
   ],
-  "author": "",
+  "author": "Jordi Bermejo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jbt95/typedlog.git"
+  },
+  "homepage": "https://github.com/jbt95/typedlog#readme",
+  "bugs": {
+    "url": "https://github.com/jbt95/typedlog/issues"
+  },
   "license": "MIT",
   "sideEffects": false,
   "engines": {
