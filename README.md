@@ -1,4 +1,4 @@
-# typedlog
+# t-log
 
 Schema-first, type-safe structured logging and observability for TypeScript.
 
@@ -13,7 +13,7 @@ Schema-first, type-safe structured logging and observability for TypeScript.
 - Granular typed errors with stable `code` and `domain` values
 - Event-level governance with redaction and PII guardrails
 - Dynamic sampling and per-event rate limiting
-- Automatic exception capture in framework integrations (`typedlog.internal.error`)
+- Automatic exception capture in framework integrations (`t-log.internal.error`)
 - Manual service-level exception capture with `logger.CaptureError(...)`
 - Typed drain handles with retry, backpressure, telemetry, and dead-letter support
 - Provider-native drains for Axiom, OTLP, Webhook, Datadog, Loki, and Better Stack
@@ -26,7 +26,7 @@ Schema-first, type-safe structured logging and observability for TypeScript.
 ## Installation
 
 ```bash
-npm install typedlog zod
+npm install t-log zod
 ```
 
 ### Requirements
@@ -37,7 +37,7 @@ npm install typedlog zod
 
 ```typescript
 import { z } from 'zod';
-import { Registry, Sink, TypedLogger } from 'typedlog';
+import { Registry, Sink, TypedLogger } from 't-log';
 
 const contextSchema = z.object({
   traceId: z.string(),
@@ -115,7 +115,7 @@ Drains send batches of events to external systems. Use them as sinks on the logg
 `Emit` is synchronous; drains handle async delivery. Call `Flush()` (or wrap with `Context.AutoFlush`) before shutdown when you need guarantees.
 
 ```typescript
-import { Drain } from 'typedlog';
+import { Drain } from 't-log';
 
 const drain = Drain.AxiomSink({ dataset: 'app', batchSize: 100, flushInterval: 5000 });
 
@@ -248,10 +248,10 @@ if (!report.compatible) {
 
 ## Errors
 
-typedlog exposes structured errors with stable `code` and `domain` values.
+t-log exposes structured errors with stable `code` and `domain` values.
 
 ```typescript
-import { Error as LogError } from 'typedlog';
+import { Error as LogError } from 't-log';
 
 try {
   logger.Emit('user.signed_in', payload);
@@ -268,7 +268,7 @@ const loggerFactory = TypedLogger.For(registry, {
   sinks: [drain.Sink],
   captureErrorsAsEvent: {
     enabled: true,
-    eventName: 'typedlog.internal.error',
+    eventName: 't-log.internal.error',
     level: 'error',
   },
 });
@@ -317,7 +317,7 @@ throw LogError.Create({
 ## Integrations
 
 Integrations use official framework types. Install the corresponding packages to get full typing support.
-`Middleware.Express`, `Middleware.Hono`, `Handler.Lambda`, `Handler.Worker`, and `TypedLogModule` handlers automatically catch thrown user errors, emit `typedlog.internal.error`, and then rethrow the original error.
+`Middleware.Express`, `Middleware.Hono`, `Handler.Lambda`, `Handler.Worker`, and `TypedLogModule` handlers automatically catch thrown user errors, emit `t-log.internal.error`, and then rethrow the original error.
 
 ### Automatic Exception Capture
 
@@ -329,14 +329,14 @@ const loggerFactory = TypedLogger.For(registry, {
 });
 
 // On thrown user errors, integrations emit:
-// event name: "typedlog.internal.error"
+// event name: "t-log.internal.error"
 // payload includes: message, code, domain, source, stack
 ```
 
 ### Express
 
 ```typescript
-import { Middleware } from 'typedlog';
+import { Middleware } from 't-log';
 
 app.use(
   Middleware.Express(loggerFactory, {
@@ -347,14 +347,14 @@ app.use(
 
 app.get('/orders/:id', (req, res) => {
   throw new Error('Database unavailable');
-  // The middleware captures and emits typedlog.internal.error, then rethrows.
+  // The middleware captures and emits t-log.internal.error, then rethrows.
 });
 ```
 
 ### Hono
 
 ```typescript
-import { Middleware } from 'typedlog';
+import { Middleware } from 't-log';
 
 app.use(
   Middleware.Hono(loggerFactory, {
@@ -368,7 +368,7 @@ app.use(
 
 ```typescript
 import { Module } from '@nestjs/common';
-import { TypedLogModule } from 'typedlog';
+import { TypedLogModule } from 't-log';
 
 @Module({
   imports: [
@@ -385,14 +385,14 @@ export class AppModule {}
 ### AWS Lambda
 
 ```typescript
-import { Handler } from 'typedlog';
+import { Handler } from 't-log';
 
 export const handler = Handler.Lambda(loggerFactory, async (event, context, logger) => {
   logger.Emit('lambda.invoke', { path: event.rawPath });
   if (!event.rawPath) throw new Error('Missing rawPath');
   return { statusCode: 200, body: 'ok' };
 });
-// Handler.Lambda captures thrown errors as typedlog.internal.error and rethrows.
+// Handler.Lambda captures thrown errors as t-log.internal.error and rethrows.
 ```
 
 ### Cloudflare Workers
@@ -400,7 +400,7 @@ export const handler = Handler.Lambda(loggerFactory, async (event, context, logg
 Workers require `nodejs_compat` to use `AsyncLocalStorage`.
 
 ```typescript
-import { Handler } from 'typedlog';
+import { Handler } from 't-log';
 
 export default {
   fetch: Handler.Worker(loggerFactory, async (request, env, ctx, logger) => {

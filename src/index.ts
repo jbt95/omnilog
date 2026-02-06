@@ -1,7 +1,7 @@
 /**
  * @packageDocumentation
  *
- * # typedlog
+ * # t-log
  *
  * Schema-first, type-safe structured logging and observability for TypeScript.
  *
@@ -20,7 +20,7 @@
  *
  * ```typescript
  * import { z } from 'zod';
- * import { TypedLogger, Registry, Sink } from 'typedlog';
+ * import { TypedLogger, Registry, Sink } from 't-log';
  *
  * // Define your context schema
  * const contextSchema = z.object({

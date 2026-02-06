@@ -126,9 +126,9 @@ describe('Drain.WebhookSink', function DrainWebhookSinkSuite() {
     drain.Sink(CreateEvent('drain.telemetry'));
     await drain.Flush();
 
-    expect(telemetryEvents.some((event) => event.metric === 'typedlog.drain.queued')).toBe(true);
-    expect(telemetryEvents.some((event) => event.metric === 'typedlog.drain.sent')).toBe(true);
-    expect(telemetryEvents.some((event) => event.metric === 'typedlog.drain.flushDurationMs')).toBe(
+    expect(telemetryEvents.some((event) => event.metric === 't-log.drain.queued')).toBe(true);
+    expect(telemetryEvents.some((event) => event.metric === 't-log.drain.sent')).toBe(true);
+    expect(telemetryEvents.some((event) => event.metric === 't-log.drain.flushDurationMs')).toBe(
       true,
     );
     vi.unstubAllGlobals();

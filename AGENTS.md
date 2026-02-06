@@ -1,4 +1,4 @@
-# typedlog
+# t-log
 
 Schema-first, type-safe structured logging and observability library.
 

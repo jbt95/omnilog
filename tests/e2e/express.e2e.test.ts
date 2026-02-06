@@ -71,7 +71,7 @@ describe('Express E2E', function ExpressE2ESuite() {
     expect(event?.context.userId).toBe('user-express');
   });
 
-  it('returns 500 and emits typedlog internal error event', async function Returns500AndEmitsInternalErrorEvent() {
+  it('returns 500 and emits t-log internal error event', async function Returns500AndEmitsInternalErrorEvent() {
     await GetJson<{ ok: boolean }>(baseUrl, '/ok', {
       headers: {
         'x-request-id': 'req-express-prime',
@@ -87,7 +87,7 @@ describe('Express E2E', function ExpressE2ESuite() {
     expect(result.status).toBe(500);
     expect(result.body?.message).toBe('express boom');
 
-    const errorEvent = memory.events.find((candidate) => candidate.name === 'typedlog.internal.error');
+    const errorEvent = memory.events.find((candidate) => candidate.name === 't-log.internal.error');
     expect(errorEvent).toBeDefined();
     const payload = errorEvent?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.express');

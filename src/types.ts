@@ -1,5 +1,5 @@
 /**
- * Core type definitions for typedlog
+ * Core type definitions for t-log
  * @module types
  */
 
@@ -11,7 +11,7 @@ import type { z } from 'zod';
 export type AnyZodSchema = z.ZodType<any, any, any>;
 
 /**
- * Event kinds supported by typedlog
+ * Event kinds supported by t-log
  * - `log`: General log events
  * - `metric`: Metrics and measurements
  * - `span`: Distributed tracing spans
@@ -484,7 +484,7 @@ export type EventDefExport = {
 };
 
 /**
- * Error domains emitted by typedlog.
+ * Error domains emitted by t-log.
  */
 export type ErrorDomain =
   | 'registry'
@@ -497,7 +497,7 @@ export type ErrorDomain =
   | 'unknown';
 
 /**
- * Stable error codes emitted by typedlog.
+ * Stable error codes emitted by t-log.
  */
 export type ErrorCode =
   | 'REGISTRY_DUPLICATE_EVENT'
@@ -622,7 +622,7 @@ export type DrainTelemetryEvent = {
 export type DrainTelemetryConfig = {
   /** Sink receiving telemetry metrics */
   sink: Sink<DrainTelemetryEvent>;
-  /** Optional metric prefix (default: 'typedlog.drain') */
+  /** Optional metric prefix (default: 't-log.drain') */
   prefix?: string;
   /** Static tags attached to every metric */
   tags?: Record<string, string>;

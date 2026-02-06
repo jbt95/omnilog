@@ -340,12 +340,41 @@ describe('Logger', function LoggerSuite() {
     );
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    expect(memory.events[0]?.name).toBe('t-log.internal.error');
     expect(memory.events[0]?.level).toBe('error');
 
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
     expect(payload?.code).toBe('LOGGER_UNKNOWN_EVENT');
     expect(payload?.domain).toBe('logger');
     expect(payload?.source).toBe('emit');
+  });
+
+  it('uses t-log.internal.error as the default capture event name', function UsesDefaultCaptureEventName() {
+    const contextSchema = z.object({ traceId: z.string().optional() });
+    const registry = Registry.Create(
+      contextSchema,
+      (registry) =>
+        [
+          registry.DefineEvent('known.event', z.object({ ok: z.boolean() }), {
+            kind: 'log',
+          }),
+        ] as const,
+    );
+    const memory = Sink.Memory<z.output<typeof contextSchema>>();
+    const loggerFactory = TypedLogger.For(registry, {
+      sinks: [memory],
+      captureErrorsAsEvent: { enabled: true },
+    });
+    const logger = loggerFactory.Singleton();
+
+    expect(() =>
+      (logger as unknown as { Emit: (name: string, payload: unknown) => unknown }).Emit(
+        'missing.event',
+        {},
+      ),
+    ).toThrow();
+
+    expect(memory.events).toHaveLength(1);
+    expect(memory.events[0]?.name).toBe('t-log.internal.error');
   });
 });

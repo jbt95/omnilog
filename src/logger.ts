@@ -141,7 +141,7 @@ export function CreateLogger<
     if (!input) {
       return {
         enabled: false,
-        eventName: 'typedlog.internal.error',
+        eventName: 't-log.internal.error',
         level: 'error',
         includeContext: true,
         includeStack: true,
@@ -151,7 +151,7 @@ export function CreateLogger<
     if (typeof input === 'boolean') {
       return {
         enabled: input,
-        eventName: 'typedlog.internal.error',
+        eventName: 't-log.internal.error',
         level: 'error',
         includeContext: true,
         includeStack: true,
@@ -160,7 +160,7 @@ export function CreateLogger<
 
     return {
       enabled: input.enabled ?? true,
-      eventName: input.eventName?.trim() || 'typedlog.internal.error',
+      eventName: input.eventName?.trim() || 't-log.internal.error',
       level: input.level ?? 'error',
       includeContext: input.includeContext ?? true,
       includeStack: input.includeStack ?? true,
@@ -199,7 +199,7 @@ export function CreateLogger<
         name: errorCapture.eventName,
         ts: new Date().toISOString(),
         schema: {
-          fingerprint: 'typedlog.internal.error',
+          fingerprint: 't-log.internal.error',
           version: '1',
         },
         context: capturedContext,

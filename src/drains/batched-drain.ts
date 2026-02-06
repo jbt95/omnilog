@@ -156,7 +156,7 @@ export class BatchedDrain<Context, Payload> {
     };
 
     const telemetryEvent: DrainTelemetryEvent = {
-      metric: `${this.telemetry.prefix ?? 'typedlog.drain'}.${metric}`,
+      metric: `${this.telemetry.prefix ?? 't-log.drain'}.${metric}`,
       value,
       ts: new Date().toISOString(),
       ...(Object.keys(mergedTags).length > 0 ? { tags: mergedTags } : {}),

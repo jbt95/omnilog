@@ -212,7 +212,7 @@ describe('Integrations', function IntegrationsSuite() {
     ).toThrow('express boom');
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    expect(memory.events[0]?.name).toBe('t-log.internal.error');
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.express');
     expect(payload?.message).toBe('express boom');
@@ -241,7 +241,7 @@ describe('Integrations', function IntegrationsSuite() {
     ).rejects.toThrow('hono boom');
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    expect(memory.events[0]?.name).toBe('t-log.internal.error');
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.hono');
     expect(payload?.message).toBe('hono boom');
@@ -266,7 +266,7 @@ describe('Integrations', function IntegrationsSuite() {
     );
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    expect(memory.events[0]?.name).toBe('t-log.internal.error');
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.lambda');
     expect(payload?.message).toBe('lambda boom');
@@ -286,7 +286,7 @@ describe('Integrations', function IntegrationsSuite() {
     await expect(handler(request, {}, ctx)).rejects.toThrow('worker boom');
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    expect(memory.events[0]?.name).toBe('t-log.internal.error');
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.worker');
     expect(payload?.message).toBe('worker boom');
@@ -328,7 +328,7 @@ describe('Integrations', function IntegrationsSuite() {
     ).rejects.toThrow('nest boom');
 
     expect(memory.events).toHaveLength(1);
-    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    expect(memory.events[0]?.name).toBe('t-log.internal.error');
     const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.nestjs');
     expect(payload?.message).toBe('nest boom');

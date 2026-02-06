@@ -10,8 +10,8 @@ import type { LoggerFactory } from '../typed-logger.js';
 import type { IntegrationOptions } from './integration-options.js';
 import { GetIntegrationDefaults } from './integration-options.js';
 
-const TypedlogExpressErrorCaptured = Symbol.for('typedlog.express.error.captured');
-const TypedlogExpressRequestCaptured = Symbol.for('typedlog.express.request.captured');
+const TypedlogExpressErrorCaptured = Symbol.for('t-log.express.error.captured');
+const TypedlogExpressRequestCaptured = Symbol.for('t-log.express.request.captured');
 
 type CaptureLogger = {
   CaptureError: (error: unknown, options?: { source?: string; details?: Record<string, unknown> }) => void;

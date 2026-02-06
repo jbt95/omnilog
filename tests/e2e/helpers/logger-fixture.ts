@@ -28,7 +28,7 @@ export function CreateLoggerFixture() {
     sinks: [memory],
     captureErrorsAsEvent: {
       enabled: true,
-      eventName: 'typedlog.internal.error',
+      eventName: 't-log.internal.error',
       level: 'error',
     },
   });

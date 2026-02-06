@@ -13,7 +13,7 @@ describe('Drain.BetterStackSink', function DrainBetterStackSinkSuite() {
       sourceToken: 'better-token',
       service: 'checkout-service',
       host: 'checkout-host',
-      source: 'typedlog',
+      source: 't-log',
       batchSize: 10,
       flushInterval: 60_000,
     });
@@ -35,8 +35,8 @@ describe('Drain.BetterStackSink', function DrainBetterStackSinkSuite() {
     expect(linePayload.message).toBe('drain.betterstack');
     expect(linePayload.service).toBe('checkout-service');
     expect(linePayload.host).toBe('checkout-host');
-    expect(linePayload.source).toBe('typedlog');
-    expect((linePayload.typedlog as Record<string, unknown>)?.name).toBe('drain.betterstack');
+    expect(linePayload.source).toBe('t-log');
+    expect((linePayload.tLog as Record<string, unknown>)?.name).toBe('drain.betterstack');
 
     vi.unstubAllGlobals();
   });

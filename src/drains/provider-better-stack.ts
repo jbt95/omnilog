@@ -13,7 +13,7 @@ function CreateBetterStackNdjson(
       ...(config.service ? { service: config.service } : {}),
       ...(config.host ? { host: config.host } : {}),
       ...(config.source ? { source: config.source } : {}),
-      typedlog: event,
+      tLog: event,
     }),
   );
 
