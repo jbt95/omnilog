@@ -1,327 +1,115 @@
 /**
- * External observability platform drains
+ * Public drains facade.
+ *
+ * This module exposes provider-native sinks and utility exports while
+ * delegating provider implementations to `src/drains/*`.
  * @module drains
  */
 
-import { createHash } from 'node:crypto';
-import type { DrainHandle, Envelope, Sink } from './types.js';
+import type {
+  BetterStackDrainConfig,
+  DatadogDrainConfig,
+  DrainConfig,
+  DrainHandle,
+  LokiDrainConfig,
+} from './types.js';
+import { BatchedDrain } from './drains/batched-drain.js';
+import { CreateDrainSink, CreateDrainSinkFactory } from './drains/drain-factory.js';
+import { CreateAxiomDrain } from './drains/provider-axiom.js';
+import { CreateOTLPDrain } from './drains/provider-otlp.js';
+import { CreateWebhookDrain, type WebhookDrainConfig } from './drains/provider-webhook.js';
+import { CreateDatadogDrain } from './drains/provider-datadog.js';
+import { CreateLokiDrain } from './drains/provider-loki.js';
+import { CreateBetterStackDrain } from './drains/provider-better-stack.js';
+import {
+  CreateDeadLetterFileSink,
+  CreateFileSource,
+  FileSource,
+  type FileSourceOptions,
+} from './drains/dead-letter-file.js';
+import { CreateFingerprint } from './drains/fingerprint.js';
+
+const createAxiomSink = CreateDrainSinkFactory(CreateAxiomDrain);
+const createOtlpSink = CreateDrainSinkFactory(CreateOTLPDrain);
+const createWebhookSink = CreateDrainSinkFactory(CreateWebhookDrain);
+const createDatadogSink = CreateDrainSinkFactory(CreateDatadogDrain);
+const createLokiSink = CreateDrainSinkFactory(CreateLokiDrain);
+const createBetterStackSink = CreateDrainSinkFactory(CreateBetterStackDrain);
 
 /**
- * Configuration for drains
- */
-export type DrainConfig = {
-  /** API endpoint URL */
-  endpoint?: string;
-  /** API key for authentication */
-  apiKey?: string;
-  /** Dataset/collection name */
-  dataset?: string;
-  /** Additional HTTP headers */
-  headers?: Record<string, string>;
-  /** Batch size for batching (default: 100) */
-  batchSize?: number;
-  /** Flush interval in ms (default: 5000) */
-  flushInterval?: number;
-};
-
-/**
- * Drain function type for external platforms
- */
-export type Drain = <Context, Payload>(
-  events: Envelope<Context, Payload>[],
-) => Promise<void> | void;
-
-function CreateDrainSink<Context, Payload>(
-  drain: Drain,
-  options?: { batchSize?: number; flushInterval?: number },
-): DrainHandle<Context, Payload> {
-  const batched = new BatchedDrain<Context, Payload>(drain, options);
-  return {
-    Sink: batched.CreateSink(),
-    Flush: () => batched.Flush(),
-  };
-}
-
-/**
- * Create a batched Axiom sink with flush handle
- *
- * @param config - Drain configuration
- * @returns Drain handle with sink and flush
+ * Create a batched Axiom sink with flush handle.
+ * Shared reliability options: `batchSize`, `flushInterval`, `retry`, `queue`, `telemetry`, `deadLetterSink`.
  */
 export function CreateAxiomSink<Context = unknown, Payload = unknown>(
   config: DrainConfig,
 ): DrainHandle<Context, Payload> {
-  return CreateDrainSink(CreateAxiomDrain(config), config);
+  return createAxiomSink<Context, Payload>(config);
 }
 
 /**
- * Create a batched OTLP sink with flush handle
- *
- * @param config - Drain configuration
- * @returns Drain handle with sink and flush
+ * Create a batched OTLP sink with flush handle.
+ * Shared reliability options: `batchSize`, `flushInterval`, `retry`, `queue`, `telemetry`, `deadLetterSink`.
  */
 export function CreateOTLPSink<Context = unknown, Payload = unknown>(
   config: DrainConfig,
 ): DrainHandle<Context, Payload> {
-  return CreateDrainSink(CreateOTLPDrain(config), config);
+  return createOtlpSink<Context, Payload>(config);
 }
 
 /**
- * Create a batched webhook sink with flush handle
- *
- * @param config - Drain configuration with URL
- * @returns Drain handle with sink and flush
+ * Create a batched webhook sink with flush handle.
+ * Shared reliability options: `batchSize`, `flushInterval`, `retry`, `queue`, `telemetry`, `deadLetterSink`.
  */
 export function CreateWebhookSink<Context = unknown, Payload = unknown>(
-  config: DrainConfig & { url: string },
+  config: WebhookDrainConfig,
 ): DrainHandle<Context, Payload> {
-  return CreateDrainSink(CreateWebhookDrain(config), config);
+  return createWebhookSink<Context, Payload>(config);
 }
 
 /**
- * Create an Axiom drain
- * 
- * Sends events to Axiom.co for storage and analysis.
- * Configure via environment variables or options:
- * - `AXIOM_ENDPOINT` or `endpoint` option
- * - `AXIOM_TOKEN` or `apiKey` option
- * - `AXIOM_DATASET` or `dataset` option
- * 
- * @param config - Drain configuration
- * @returns Axiom drain function
- * 
- * @example
- * ```typescript
- * const drain = CreateAxiomSink({
- *   endpoint: 'https://api.axiom.co',
- *   apiKey: process.env.AXIOM_TOKEN,
- *   dataset: 'my-app',
- * });
- * 
- * const loggerFactory = TypedLogger.For(registry, {
- *   sinks: [drain.Sink],
- * });
- * const logger = loggerFactory.Singleton();
- * ```
+ * Create a batched Datadog sink with flush handle.
+ * Shared reliability options: `batchSize`, `flushInterval`, `retry`, `queue`, `telemetry`, `deadLetterSink`.
  */
-export function CreateAxiomDrain(config: DrainConfig): Drain {
-  const endpoint = config.endpoint ?? process.env.AXIOM_ENDPOINT;
-  const apiKey = config.apiKey ?? process.env.AXIOM_TOKEN;
-  const dataset = config.dataset ?? process.env.AXIOM_DATASET;
-
-  return async (events) => {
-    if (!endpoint || !apiKey || !dataset) {
-      console.warn('Axiom drain: missing configuration');
-      return;
-    }
-
-    try {
-      const response = await fetch(`${endpoint}/v1/datasets/${dataset}/ingest`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-          ...config.headers,
-        },
-        body: JSON.stringify(events),
-      });
-
-      if (!response.ok) {
-        console.error(`Axiom drain failed: ${response.status} ${response.statusText}`);
-      }
-    } catch (error) {
-      console.error('Axiom drain error:', error);
-    }
-  };
+export function CreateDatadogSink<Context = unknown, Payload = unknown>(
+  config: DatadogDrainConfig,
+): DrainHandle<Context, Payload> {
+  return createDatadogSink<Context, Payload>(config);
 }
 
 /**
- * Create an OTLP drain for OpenTelemetry
- * 
- * Sends events in OTLP format to any OpenTelemetry-compatible backend
- * (Grafana, Datadog, Honeycomb, etc.).
- * 
- * @param config - Drain configuration
- * @returns OTLP drain function
- * 
- * @example
- * ```typescript
- * const drain = CreateOTLPSink({
- *   endpoint: 'http://localhost:4318',
- * });
- * 
- * const loggerFactory = TypedLogger.For(registry, {
- *   sinks: [drain.Sink],
- * });
- * const logger = loggerFactory.Singleton();
- * ```
+ * Create a batched Loki sink with flush handle.
+ * Shared reliability options: `batchSize`, `flushInterval`, `retry`, `queue`, `telemetry`, `deadLetterSink`.
  */
-export function CreateOTLPDrain(config: DrainConfig): Drain {
-  const endpoint = config.endpoint ?? process.env.OTLP_ENDPOINT ?? 'http://localhost:4318';
-
-  return async (events) => {
-    try {
-      const response = await fetch(`${endpoint}/v1/logs`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...config.headers,
-        },
-        body: JSON.stringify({
-          resourceLogs: events.map((event) => ({
-            resource: {
-              attributes: [
-                { key: 'service.name', value: { stringValue: 'typedlog' } },
-              ],
-            },
-            scopeLogs: [
-              {
-                logRecords: [
-                  {
-                    timeUnixNano: BigInt(new Date(event.ts).getTime()) * 1000000n,
-                    severityText: event.level?.toUpperCase() ?? 'INFO',
-                    body: { stringValue: JSON.stringify(event) },
-                    attributes: Object.entries(event.context as Record<string, unknown>).map(([key, value]) => ({
-                      key,
-                      value: { stringValue: JSON.stringify(value) },
-                    })),
-                  },
-                ],
-              },
-            ],
-          })),
-        }),
-      });
-
-      if (!response.ok) {
-        console.error(`OTLP drain failed: ${response.status} ${response.statusText}`);
-      }
-    } catch (error) {
-      console.error('OTLP drain error:', error);
-    }
-  };
+export function CreateLokiSink<Context = unknown, Payload = unknown>(
+  config: LokiDrainConfig,
+): DrainHandle<Context, Payload> {
+  return createLokiSink<Context, Payload>(config);
 }
 
 /**
- * Create a webhook drain
- * 
- * Sends events to a custom webhook URL.
- * 
- * @param config - Drain configuration with URL
- * @returns Webhook drain function
- * 
- * @example
- * ```typescript
- * const drain = CreateWebhookSink({
- *   url: 'https://my-service.com/webhook',
- *   headers: { 'X-Custom-Header': 'value' },
- * });
- * 
- * const loggerFactory = TypedLogger.For(registry, {
- *   sinks: [drain.Sink],
- * });
- * const logger = loggerFactory.Singleton();
- * ```
+ * Create a batched Better Stack sink with flush handle.
+ * Shared reliability options: `batchSize`, `flushInterval`, `retry`, `queue`, `telemetry`, `deadLetterSink`.
  */
-export function CreateWebhookDrain(config: DrainConfig & { url: string }): Drain {
-  return async (events) => {
-    try {
-      const response = await fetch(config.url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...config.headers,
-        },
-        body: JSON.stringify(events),
-      });
-
-      if (!response.ok) {
-        console.error(`Webhook drain failed: ${response.status} ${response.statusText}`);
-      }
-    } catch (error) {
-      console.error('Webhook drain error:', error);
-    }
-  };
+export function CreateBetterStackSink<Context = unknown, Payload = unknown>(
+  config: BetterStackDrainConfig,
+): DrainHandle<Context, Payload> {
+  return createBetterStackSink<Context, Payload>(config);
 }
 
-/**
- * Batched drain wrapper for efficient sending
- * 
- * Buffers events and flushes them in batches or after a timeout.
- * 
- * @example
- * ```typescript
- * const axiomDrain = CreateAxiomDrain(config);
- * const batched = new BatchedDrain(axiomDrain, {
- *   batchSize: 100,
- *   flushInterval: 5000,
- * });
- * 
- * const loggerFactory = TypedLogger.For(registry, {
- *   sinks: [batched.CreateSink()],
- * });
- * const logger = loggerFactory.Singleton();
- * ```
- */
-export class BatchedDrain<Context, Payload> {
-  private events: Envelope<Context, Payload>[] = [];
-  private drain: Drain;
-  private batchSize: number;
-  private flushInterval: number;
-  private timeoutId?: ReturnType<typeof setTimeout> | undefined;
+export {
+  BatchedDrain,
+  CreateDrainSink,
+  CreateDrainSinkFactory,
+  CreateAxiomDrain,
+  CreateOTLPDrain,
+  CreateWebhookDrain,
+  CreateDatadogDrain,
+  CreateLokiDrain,
+  CreateBetterStackDrain,
+  CreateDeadLetterFileSink,
+  CreateFileSource,
+  CreateFingerprint,
+  FileSource,
+};
 
-  constructor(
-    drain: Drain,
-    options: { batchSize?: number; flushInterval?: number } = {},
-  ) {
-    this.drain = drain;
-    this.batchSize = options.batchSize ?? 100;
-    this.flushInterval = options.flushInterval ?? 5000;
-  }
-
-  /**
-   * Add an event to the batch
-   */
-  Add(event: Envelope<Context, Payload>): void {
-    this.events.push(event);
-
-    if (this.events.length >= this.batchSize) {
-      this.Flush();
-    } else if (!this.timeoutId) {
-      this.timeoutId = setTimeout(() => this.Flush(), this.flushInterval);
-    }
-  }
-
-  /**
-   * Flush all buffered events
-   */
-  async Flush(): Promise<void> {
-    if (this.timeoutId) {
-      clearTimeout(this.timeoutId);
-      this.timeoutId = undefined;
-    }
-
-    if (this.events.length === 0) return;
-
-    const batch = this.events.splice(0, this.batchSize);
-    await this.drain(batch);
-  }
-
-  /**
-   * Create a sink that adds to this batch
-   */
-  CreateSink(): Sink<Envelope<Context, Payload>> {
-    return (event: Envelope<Context, Payload>) => this.Add(event);
-  }
-}
-
-/**
- * Create a unique fingerprint for an event
- * 
- * @param event - Event to fingerprint
- * @returns 16-character hexadecimal fingerprint
- */
-export function CreateFingerprint(event: Envelope<unknown, unknown>): string {
-  const content = `${event.name}:${event.ts}:${JSON.stringify(event.payload)}`;
-  return createHash('sha256').update(content).digest('hex').slice(0, 16);
-}
+export type { FileSourceOptions, WebhookDrainConfig };

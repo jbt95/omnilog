@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { stdout } from 'node:process';
-import {
-  Sink,
-} from '../src/index.js';
+import { Sink } from '../src/index.js';
 import type { Envelope } from '../src/index.js';
 
 describe('Sinks', function SinksSuite() {

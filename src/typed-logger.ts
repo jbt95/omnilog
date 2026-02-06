@@ -6,13 +6,16 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 import type {
+  Envelope,
+  EventByName,
   EventDefAny,
+  PolicySimulationResult,
   Registry,
-  RegistryBuilder,
 } from './types.js';
-import type { LoggerInstance, LoggerOptions } from './logger.js';
+import type { LoggerInstance, LoggerOptions, LoggerRuntimeState } from './logger.js';
 import { CreateLogger } from './logger.js';
-import { CreateRegistry } from './registry.js';
+import { ApplyRedaction } from './redaction.js';
+import { DetectPii } from './pii-guard.js';
 
 export type LoggerFactory<
   ContextSchema extends z.ZodObject<z.ZodRawShape>,
@@ -26,67 +29,136 @@ export type LoggerFactory<
   Get: () => LoggerInstance<ContextSchema, Events>;
 };
 
-export type LoggerCreateOptions<
+export type LoggerSimulationOptions<
   ContextSchema extends z.ZodObject<z.ZodRawShape>,
   Events extends readonly EventDefAny[],
+  Name extends Events[number]['name'],
 > = {
-  contextSchema: ContextSchema;
-  events: Events | ((registry: RegistryBuilder<ContextSchema>) => Events);
-} & LoggerOptions<z.output<ContextSchema>>;
+  registry: Registry<ContextSchema, Events>;
+  name: Name;
+  payload: z.output<EventByName<Events, Name>['schema']>;
+  context: z.output<ContextSchema>;
+  policy?: LoggerOptions<z.output<ContextSchema>>['policy'];
+};
 
 export class TypedLogger {
   /**
-   * Create a logger factory from a context schema and events definition.
+   * Simulate policy behavior for a single event without emitting it.
    *
-   * @example
-   * ```typescript
-   * const loggerFactory = TypedLogger.Create({
-   *   contextSchema,
-   *   events: (registry) => [
-   *     registry.DefineEvent('user.login', z.object({ id: z.string() }), {
-   *       kind: 'log',
-   *       require: ['traceId'] as const,
-   *     }),
-   *   ] as const,
-   *   sinks: [Sink.Environment()],
-   * });
-   *
-   * await loggerFactory.Scoped({ traceId: 'abc' }, (logger) => {
-   *   logger.Emit('user.login', { id: 'user_1' });
-   * });
-   * ```
+   * Useful for validating redaction, required context, and PII guard behavior in tests
+   * or CI checks.
    */
-  static Create<
+  static Simulate<
     ContextSchema extends z.ZodObject<z.ZodRawShape>,
     const Events extends readonly EventDefAny[],
+    Name extends Events[number]['name'],
   >(
-    options: {
-      contextSchema: ContextSchema;
-      events: Events;
-    } & LoggerOptions<z.output<ContextSchema>>,
-  ): LoggerFactory<ContextSchema, Events>;
-  static Create<
-    ContextSchema extends z.ZodObject<z.ZodRawShape>,
-    const Events extends readonly EventDefAny[],
-  >(
-    options: {
-      contextSchema: ContextSchema;
-      events: (registry: RegistryBuilder<ContextSchema>) => Events;
-    } & LoggerOptions<z.output<ContextSchema>>,
-  ): LoggerFactory<ContextSchema, Events>;
-  static Create<
-    ContextSchema extends z.ZodObject<z.ZodRawShape>,
-    const Events extends readonly EventDefAny[],
-  >(
-    options: LoggerCreateOptions<ContextSchema, Events>,
-  ): LoggerFactory<ContextSchema, Events> {
-    const { contextSchema, events, ...loggerOptions } = options;
-    const registry = CreateRegistry(contextSchema, events as any);
-    return TypedLogger.For(registry as Registry<ContextSchema, Events>, loggerOptions);
+    options: LoggerSimulationOptions<ContextSchema, Events, Name>,
+  ): PolicySimulationResult<
+    z.output<ContextSchema>,
+    z.output<EventByName<Events, Name>['schema']>
+  > {
+    const { registry, name, payload, context, policy } = options;
+    const event = registry.eventsByName[name] as EventByName<Events, Name> | undefined;
+    if (!event) {
+      throw new Error(`Unknown event: ${String(name)}`);
+    }
+
+    const warnings: string[] = [];
+
+    const payloadResult = event.schema.safeParse(payload);
+    if (!payloadResult.success) {
+      throw new Error(`Invalid payload for ${event.name}: ${payloadResult.error.message}`);
+    }
+
+    const contextResult = registry.contextSchema.safeParse(context);
+    if (!contextResult.success) {
+      throw new Error(`Invalid context: ${contextResult.error.message}`);
+    }
+
+    if (event.require && event.require.length > 0) {
+      for (const requiredKey of event.require) {
+        if (contextResult.data[requiredKey as keyof typeof contextResult.data] === undefined) {
+          throw new Error(
+            `Missing required context "${String(requiredKey)}" for event ${event.name}`,
+          );
+        }
+      }
+    }
+
+    const piiFindings = policy?.piiGuard
+      ? DetectPii(payloadResult.data, event.tags, policy.piiGuard)
+      : [];
+    if (piiFindings.length > 0) {
+      warnings.push(
+        `PII guard detected sensitive values at ${piiFindings
+          .map((finding) => finding.path)
+          .join(', ')}`,
+      );
+      if (policy?.piiGuard?.mode === 'block') {
+        return {
+          accepted: false,
+          warnings,
+          piiFindings,
+        };
+      }
+    }
+
+    const envelope: Envelope<
+      z.output<ContextSchema>,
+      z.output<EventByName<Events, Name>['schema']>
+    > = {
+      kind: event.kind,
+      name: event.name,
+      ts: new Date().toISOString(),
+      schema: {
+        fingerprint: event.fingerprint,
+        ...(event.version !== undefined ? { version: event.version } : {}),
+      },
+      context: contextResult.data,
+      payload: payloadResult.data,
+      ...(event.level !== undefined ? { level: event.level } : {}),
+      ...(event.tags !== undefined ? { tags: event.tags } : {}),
+    };
+
+    const redacted = ApplyRedaction(
+      envelope as unknown as Record<string, unknown>,
+      event.tags,
+      policy?.redactionMode ?? 'strict',
+      policy?.redact,
+    ) as unknown as Envelope<
+      z.output<ContextSchema>,
+      z.output<EventByName<Events, Name>['schema']>
+    >;
+
+    return {
+      accepted: true,
+      warnings,
+      piiFindings,
+      envelope,
+      redacted,
+    };
   }
 
   /**
    * Create a logger factory from an existing registry.
+   *
+   * This is the only logger creation entrypoint. Build your registry with
+   * `Registry.Create(...)`, then pass it to `TypedLogger.For(...)`.
+   *
+   * @example
+   * ```typescript
+   * const registry = Registry.Create(contextSchema, (registry) => [
+   *   registry.DefineEvent('user.login', z.object({ id: z.string() }), {
+   *     kind: 'log',
+   *     require: ['traceId'] as const,
+   *   }),
+   * ] as const);
+   *
+   * const loggerFactory = TypedLogger.For(registry, {
+   *   sinks: [Sink.Environment()],
+   * });
+   * ```
    */
   static For<
     ContextSchema extends z.ZodObject<z.ZodRawShape>,
@@ -97,10 +169,19 @@ export class TypedLogger {
   ): LoggerFactory<ContextSchema, Events> {
     const loggerStore = new AsyncLocalStorage<LoggerInstance<ContextSchema, Events>>();
     let singleton: LoggerInstance<ContextSchema, Events> | undefined;
+    const runtimeState: LoggerRuntimeState = {
+      ...(options.runtime ?? {}),
+      rateLimitBuckets: options.runtime?.rateLimitBuckets ?? new Map(),
+      deprecationWarnings: options.runtime?.deprecationWarnings ?? new Set(),
+    };
+    const loggerOptions: LoggerOptions<z.output<ContextSchema>> = {
+      ...options,
+      runtime: runtimeState,
+    };
 
     function Singleton(): LoggerInstance<ContextSchema, Events> {
       if (!singleton) {
-        singleton = CreateLogger(registry, options);
+        singleton = CreateLogger(registry, loggerOptions);
       }
       return singleton;
     }
@@ -117,7 +198,7 @@ export class TypedLogger {
       context: z.output<ContextSchema>,
       fn: (logger: LoggerInstance<ContextSchema, Events>) => Result | Promise<Result>,
     ): Result | Promise<Result> {
-      const logger = CreateLogger(registry, options);
+      const logger = CreateLogger(registry, loggerOptions);
       return loggerStore.run(logger, () => logger.Run(context, () => fn(logger)));
     }
 

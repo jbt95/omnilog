@@ -53,9 +53,48 @@
     "zod": "^3.23.0",
     "zod-to-json-schema": "^3.25.1"
   },
+  "peerDependencies": {
+    "@cloudflare/workers-types": "*",
+    "@nestjs/common": "*",
+    "@nestjs/core": "*",
+    "@types/aws-lambda": "*",
+    "@types/express": "*",
+    "express": "*",
+    "hono": "*"
+  },
+  "peerDependenciesMeta": {
+    "@cloudflare/workers-types": {
+      "optional": true
+    },
+    "@nestjs/common": {
+      "optional": true
+    },
+    "@nestjs/core": {
+      "optional": true
+    },
+    "@types/aws-lambda": {
+      "optional": true
+    },
+    "@types/express": {
+      "optional": true
+    },
+    "express": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@cloudflare/workers-types": "*",
+    "@nestjs/common": "*",
+    "@nestjs/core": "*",
     "@tsconfig/node20": "^20.1.9",
+    "@types/aws-lambda": "*",
+    "@types/express": "*",
     "@types/node": "^22.0.0",
+    "express": "*",
+    "hono": "*",
     "prettier": "^3.4.0",
     "tsup": "^8.5.1",
     "typescript": "^5.7.0",

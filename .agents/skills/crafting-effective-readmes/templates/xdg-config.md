@@ -15,8 +15,8 @@ The audience is future-you, probably confused.
 
 ## What's Here
 
-| Path | Purpose |
-|------|---------|
+| Path            | Purpose        |
+| --------------- | -------------- |
 | `[file-or-dir]` | [What it does] |
 | `[file-or-dir]` | [What it does] |
 | `[file-or-dir]` | [What it does] |

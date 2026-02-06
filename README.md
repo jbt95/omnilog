@@ -10,9 +10,14 @@ Schema-first, type-safe structured logging and observability for TypeScript.
 - Schema-first event definitions with Zod validation
 - Type-safe payloads and context inferred from schemas
 - Request-scoped logging via `AsyncLocalStorage`
-- Field-level redaction with tag-based policies
-- Pluggable sinks and drains (Axiom, OTLP, webhook)
-- Memory sink for tests
+- Event-level governance with redaction and PII guardrails
+- Dynamic sampling and per-event rate limiting
+- Typed drain handles with retry, backpressure, telemetry, and dead-letter support
+- Provider-native drains for Axiom, OTLP, Webhook, Datadog, Loki, and Better Stack
+- Dead-letter replay tooling for recovery workflows
+- Context enrichers and trace correlation support
+- Official integrations for Express, Hono, NestJS, AWS Lambda, and Cloudflare Workers
+- Memory sink and policy simulation for testing
 
 ## Installation
 
@@ -28,16 +33,16 @@ npm install typedlog zod
 
 ```typescript
 import { z } from 'zod';
-import { Sink, TypedLogger } from 'typedlog';
+import { Registry, Sink, TypedLogger } from 'typedlog';
 
 const contextSchema = z.object({
   traceId: z.string(),
   userId: z.string().optional(),
 });
 
-const loggerFactory = TypedLogger.Create({
+const registry = Registry.Create(
   contextSchema,
-  events: (registry) =>
+  (registry) =>
     [
       registry.DefineEvent(
         'user.signed_in',
@@ -49,6 +54,9 @@ const loggerFactory = TypedLogger.Create({
         },
       ),
     ] as const,
+);
+
+const loggerFactory = TypedLogger.For(registry, {
   sinks: [Sink.Environment()],
   policy: { redact: ['pii'] },
 });
@@ -57,8 +65,6 @@ await loggerFactory.Scoped({ traceId: 'abc123', userId: 'user_1' }, (logger) => 
   logger.Emit('user.signed_in', { email: 'user@example.com', ip: '192.168.1.1' });
 });
 ```
-
-Advanced usage: use `Registry.Create(...)` and `TypedLogger.For(registry, options)` when you need to export a registry or share it across modules.
 
 ## Defining Events
 
@@ -116,18 +122,223 @@ const loggerFactory = TypedLogger.For(registry, {
 await drain.Flush();
 ```
 
+### Drain Reliability
+
+Built-in drain sinks support retries, queue backpressure, telemetry, and dead-letter handling.
+
+```typescript
+const deadLetterSink = Drain.DeadLetterFile({ path: './dead-letter.ndjson' });
+
+const drain = Drain.WebhookSink({
+  url: process.env.LOG_WEBHOOK_URL!,
+  batchSize: 100,
+  flushInterval: 2000,
+  retry: { maxAttempts: 5, baseDelayMs: 100, maxDelayMs: 3000, jitter: 'full' },
+  queue: { maxItems: 10000, strategy: 'drop-oldest' },
+  telemetry: { sink: (metric) => console.log(metric) },
+  deadLetterSink,
+});
+```
+
+### More Drains
+
+```typescript
+const otlpDrain = Drain.OTLPSink({
+  endpoint: process.env.OTLP_ENDPOINT ?? 'http://localhost:4318',
+});
+
+const datadogDrain = Drain.DatadogSink({
+  apiKey: process.env.DATADOG_API_KEY,
+  site: 'us1',
+  service: 'checkout-api',
+});
+
+const lokiDrain = Drain.LokiSink({
+  endpoint: 'https://loki.example.com/loki/api/v1/push',
+  bearerToken: process.env.LOKI_TOKEN,
+  labels: { app: 'checkout-api', env: 'prod' },
+  includeEventNameLabel: true,
+});
+
+const betterStackDrain = Drain.BetterStackSink({
+  sourceToken: process.env.BETTERSTACK_SOURCE_TOKEN,
+});
+```
+
+Use the same sink-handle shape for all providers:
+
+```typescript
+const loggerFactory = TypedLogger.For(registry, { sinks: [datadogDrain.Sink] });
+await datadogDrain.Flush();
+```
+
+### Drain Replay
+
+```typescript
+const source = Drain.FileSource({ path: './dead-letter.ndjson' });
+const replay = await source.ReplayTo(drain.Sink, { maxPerSecond: 500 });
+await drain.Flush();
+console.log(replay); // { replayed, failed }
+```
+
+## Sampling and Rate Limits
+
+```typescript
+const loggerFactory = TypedLogger.For(registry, {
+  sinks: [drain.Sink],
+  policy: {
+    sample: {
+      rate: 0.2,
+      adaptive: true,
+      rules: [{ event: 'error.raised', rate: 1 }],
+    },
+    rateLimit: {
+      rules: [{ event: 'http.request', burst: 200, perSecond: 100 }],
+    },
+  },
+});
+```
+
+## Context Enrichers and Tracing
+
+```typescript
+const loggerFactory = TypedLogger.For(registry, {
+  sinks: [drain.Sink],
+  tracing: { provider: 'opentelemetry', injectTraceContext: true },
+  enrichers: [
+    Context.Runtime(),
+    Context.Region(),
+    Context.RequestHeaders(['user-agent', 'cf-ray']),
+  ],
+});
+```
+
+## PII Guard and Simulation
+
+```typescript
+const loggerFactory = TypedLogger.For(registry, {
+  sinks: [drain.Sink],
+  policy: {
+    piiGuard: { mode: 'warn', detectors: ['email', 'phone'], requireTags: true },
+  },
+});
+
+const simulation = TypedLogger.Simulate({
+  registry,
+  name: 'user.signed_in',
+  context: { traceId: 'trace_1' },
+  payload: { email: 'person@example.com' },
+  policy: { redact: ['pii'] },
+});
+```
+
+## Schema Compatibility
+
+```typescript
+const previous = Registry.Export(previousRegistry);
+const report = Registry.Compare(previous, currentRegistry);
+if (!report.compatible) {
+  console.error(report.issues);
+}
+```
+
+## Integrations
+
+Integrations use official framework types. Install the corresponding packages to get full typing support.
+
+### Express
+
+```typescript
+import { Middleware } from 'typedlog';
+
+app.use(
+  Middleware.Express(loggerFactory, {
+    LoggerKey: 'logger',
+    GetContext: (req) => ({ userId: req.header('x-user-id') }),
+  }),
+);
+```
+
+### Hono
+
+```typescript
+import { Middleware } from 'typedlog';
+
+app.use(
+  Middleware.Hono(loggerFactory, {
+    LoggerKey: 'logger',
+    GetContext: (c) => ({ userId: c.req.header('x-user-id') }),
+  }),
+);
+```
+
+### NestJS
+
+```typescript
+import { Module } from '@nestjs/common';
+import { TypedLogModule } from 'typedlog';
+
+@Module({
+  imports: [
+    TypedLogModule.forRoot({
+      loggerFactory,
+      LoggerKey: 'logger',
+      GetContext: (req) => ({ userId: req.header('x-user-id') }),
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+### AWS Lambda
+
+```typescript
+import { Handler } from 'typedlog';
+
+export const handler = Handler.Lambda(loggerFactory, async (event, context, logger) => {
+  logger.Emit('lambda.invoke', { path: event.rawPath });
+  return { statusCode: 200, body: 'ok' };
+});
+```
+
+### Cloudflare Workers
+
+Workers require `nodejs_compat` to use `AsyncLocalStorage`.
+
+```typescript
+import { Handler } from 'typedlog';
+
+export default {
+  fetch: Handler.Worker(loggerFactory, async (request, env, ctx, logger) => {
+    logger.Emit('http.request', { path: new URL(request.url).pathname });
+    return new Response('ok');
+  }),
+};
+```
+
 ## API Overview
 
-- `TypedLogger.Create({ contextSchema, events, sinks, policy, context })`
 - `Registry.Create(contextSchema, (registry) => events)`
 - `registry.DefineEvent(name, schema, options)`
 - `TypedLogger.For(registry, options)`
 - `TypedLogger.For(...).Scoped(context, (logger) => fn)`
 - `TypedLogger.For(...).Get()`
+- `TypedLogger.Simulate(...)`
 - `Sink.Environment()`
 - `Sink.Memory()`
 - `Drain.AxiomSink()`, `Drain.OTLPSink()`, `Drain.WebhookSink()`
-- `Drain.Axiom()`, `Drain.OTLP()`, `Drain.Webhook()`, `new Drain.Batched()`
+- `Drain.DatadogSink()`, `Drain.LokiSink()`, `Drain.BetterStackSink()`
+- `Drain.DeadLetterFile()`, `Drain.FileSource()`
+- `Context.Runtime()`, `Context.Region()`, `Context.RequestHeaders()`
+- `Middleware.Express()`, `Middleware.Hono()`
+- `Handler.Lambda()`, `Handler.Worker()`
+- `TypedLogModule.forRoot(...)`
+
+## Development Notes
+
+- Drain tests are organized per provider in `tests/drain-*.test.ts`.
+- Run `pnpm test` to execute the full suite.
+- Run `pnpm run typecheck` before shipping changes.
 
 ## License
 

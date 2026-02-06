@@ -31,10 +31,10 @@ Focus on onboarding new team members and operational knowledge.
 
 ### Environment Variables
 
-| Variable | Description | Where to get it |
-|----------|-------------|-----------------|
+| Variable       | Description   | Where to get it       |
+| -------------- | ------------- | --------------------- |
 | `DATABASE_URL` | [Description] | [1Password/Vault/etc] |
-| `API_KEY` | [Description] | [Where to find] |
+| `API_KEY`      | [Description] | [Where to find]       |
 
 ### Running Locally
 
@@ -58,10 +58,10 @@ Focus on onboarding new team members and operational knowledge.
 
 ### Key Files
 
-| Path | Purpose |
-|------|---------|
-| `src/[important-file]` | [What it does] |
-| `config/` | [Configuration files] |
+| Path                   | Purpose               |
+| ---------------------- | --------------------- |
+| `src/[important-file]` | [What it does]        |
+| `config/`              | [Configuration files] |
 
 ## Deployment
 
@@ -69,11 +69,11 @@ Focus on onboarding new team members and operational knowledge.
 
 ### Environments
 
-| Environment | URL | Notes |
-|-------------|-----|-------|
+| Environment | URL   | Notes   |
+| ----------- | ----- | ------- |
 | Development | [URL] | [Notes] |
-| Staging | [URL] | [Notes] |
-| Production | [URL] | [Notes] |
+| Staging     | [URL] | [Notes] |
+| Production  | [URL] | [Notes] |
 
 ## Runbooks
 

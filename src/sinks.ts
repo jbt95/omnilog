@@ -154,7 +154,10 @@ export function CreateStructuredSink<Context = unknown, Payload = unknown>(): Si
  *
  * @returns Sink function with captured events
  */
-export function CreateMemorySink<Context = unknown, Payload = unknown>(): MemorySink<Context, Payload> {
+export function CreateMemorySink<Context = unknown, Payload = unknown>(): MemorySink<
+  Context,
+  Payload
+> {
   const events: Envelope<Context, Payload>[] = [];
 
   const sink = ((event: unknown) => {

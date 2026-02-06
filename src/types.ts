@@ -41,15 +41,7 @@ export type FieldTag = 'pii' | 'secret' | 'token' | 'sensitive';
  */
 export type TagMap = Partial<Record<string, FieldTag | readonly FieldTag[]>>;
 
-type Primitive =
-  | string
-  | number
-  | boolean
-  | bigint
-  | symbol
-  | null
-  | undefined
-  | Date;
+type Primitive = string | number | boolean | bigint | symbol | null | undefined | Date;
 
 type IsPlainObject<T> = T extends Primitive
   ? false
@@ -104,7 +96,7 @@ export type RedactionMode = 'strict' | 'lenient' | 'dev';
 
 /**
  * Options for defining an event
- * 
+ *
  * @template Kind - The event kind
  * @template Require - Required context keys
  * @template Tags - Field tags for governance
@@ -124,13 +116,17 @@ export type EventOptions<
   require?: Require;
   /** Field tags for PII/sensitive data redaction */
   tags?: Tags;
+  /** Whether this event is deprecated */
+  deprecated?: boolean;
+  /** Deprecation guidance message */
+  deprecationMessage?: string;
   /** Human-readable description */
   description?: string;
 };
 
 /**
  * Event definition with full type information
- * 
+ *
  * @template Name - Event name (unique identifier)
  * @template Kind - Event kind
  * @template Schema - Zod schema for payload validation
@@ -160,6 +156,10 @@ export type EventDef<
   require?: Require;
   /** Field tags for governance */
   tags?: Tags;
+  /** Whether this event is deprecated */
+  deprecated?: boolean;
+  /** Deprecation guidance message */
+  deprecationMessage?: string;
   /** Human-readable description */
   description?: string;
 };
@@ -192,7 +192,7 @@ export type EventByName<Events extends readonly EventDefAny[], Name extends stri
 
 /**
  * Event envelope containing all event data
- * 
+ *
  * @template Context - Context type
  * @template Payload - Payload type
  */
@@ -229,12 +229,141 @@ export type Policy = {
   /** Redaction mode */
   redactionMode?: RedactionMode;
   /** Sampling configuration */
-  sample?: {
-    /** Sampling rate (0-1) */
-    rate: number;
-    /** Adaptive sampling (always keep errors) */
-    adaptive?: boolean;
-  };
+  sample?: SamplingConfig;
+  /** Per-event rate limiting */
+  rateLimit?: RateLimitConfig;
+  /** PII guardrails for payloads */
+  piiGuard?: PiiGuardConfig;
+};
+
+/**
+ * Sampling rule for dynamic event sampling
+ */
+export type SamplingRule = {
+  /** Match by event name */
+  event?: string;
+  /** Match by event kind */
+  kind?: EventKind;
+  /** Match by event level */
+  level?: LogLevel;
+  /** Sampling rate for matching events (0..1) */
+  rate: number;
+  /** Optional predicate for additional filtering */
+  when?: (input: {
+    event: string;
+    kind: EventKind;
+    level?: LogLevel;
+    context: Record<string, unknown>;
+    payload: unknown;
+  }) => boolean;
+};
+
+/**
+ * Sampling configuration
+ */
+export type SamplingConfig = {
+  /** Default sampling rate (0-1) */
+  rate?: number;
+  /** Adaptive sampling (always keep errors) */
+  adaptive?: boolean;
+  /** Rule-based overrides */
+  rules?: readonly SamplingRule[];
+};
+
+/**
+ * Per-event rate limit rule
+ */
+export type RateLimitRule = {
+  /** Event name this rule applies to */
+  event: string;
+  /** Maximum tokens in bucket */
+  burst: number;
+  /** Refill rate in tokens/second */
+  perSecond: number;
+};
+
+/**
+ * Rate limiting configuration
+ */
+export type RateLimitConfig = {
+  /** Event-specific rules */
+  rules: readonly RateLimitRule[];
+  /** Behavior when rate limit is exceeded */
+  onLimit?: 'drop' | 'throw';
+};
+
+/**
+ * Supported PII detectors
+ */
+export type PiiDetector = 'email' | 'phone' | 'credit-card';
+
+/**
+ * PII finding result
+ */
+export type PiiFinding = {
+  /** JSON path inside payload */
+  path: string;
+  /** Detector that matched */
+  detector: PiiDetector;
+  /** Redacted value preview */
+  valuePreview: string;
+  /** Whether field had explicit sensitivity tag */
+  tagged: boolean;
+};
+
+/**
+ * PII guard configuration
+ */
+export type PiiGuardConfig = {
+  /** Guard mode */
+  mode: 'warn' | 'block';
+  /** Enabled detectors (default: all) */
+  detectors?: readonly PiiDetector[];
+  /** Only flag sensitive values without tags (default: true) */
+  requireTags?: boolean;
+};
+
+/**
+ * Trace context metadata
+ */
+export type TraceContext = {
+  traceId?: string;
+  spanId?: string;
+  traceFlags?: string;
+  traceparent?: string;
+};
+
+/**
+ * Context enricher input
+ */
+export type ContextEnricherInput<Context> = {
+  name: string;
+  kind: EventKind;
+  level?: LogLevel;
+  ts: string;
+  context: Partial<Context>;
+  payload: unknown;
+};
+
+/**
+ * Context enricher callback
+ */
+export type ContextEnricher<Context> = (
+  input: ContextEnricherInput<Context>,
+) => Partial<Context> | void;
+
+/**
+ * Tracing integration options
+ */
+export type TracingOptions<Context> = {
+  /** Tracing provider identifier */
+  provider?: 'opentelemetry';
+  /** Inject trace metadata into context */
+  injectTraceContext?: boolean;
+  /** Custom trace context resolver */
+  GetTraceContext?: () => TraceContext | undefined;
+  /** Optional mapper from trace context to logger context */
+  MapTraceContext?: (traceContext: TraceContext) => Partial<Context>;
 };
 
 /**
@@ -274,7 +403,10 @@ export type ContextManager<Context> = {
 /**
  * Event registry containing all event definitions
  */
-export type Registry<ContextSchema extends z.ZodObject<z.ZodRawShape>, Events extends readonly EventDefAny[]> = {
+export type Registry<
+  ContextSchema extends z.ZodObject<z.ZodRawShape>,
+  Events extends readonly EventDefAny[],
+> = {
   /** Context schema */
   contextSchema: ContextSchema;
   /** All event definitions */
@@ -315,6 +447,10 @@ export type EventDefExport = {
   require?: readonly string[];
   /** Field tags */
   tags?: TagMap;
+  /** Whether this event is deprecated */
+  deprecated?: boolean;
+  /** Deprecation guidance message */
+  deprecationMessage?: string;
   /** Description */
   description?: string;
   /** JSON Schema representation */
@@ -359,6 +495,109 @@ export type Drain = <Context, Payload>(
 ) => Promise<void> | void;
 
 /**
+ * Retry jitter strategy
+ */
+export type DrainRetryJitter = 'none' | 'full';
+
+/**
+ * Retry configuration for drain delivery
+ */
+export type DrainRetryConfig = {
+  /** Maximum attempts including the first one (default: 3) */
+  maxAttempts?: number;
+  /** Base delay in milliseconds for exponential backoff (default: 100) */
+  baseDelayMs?: number;
+  /** Maximum backoff delay in milliseconds (default: 3000) */
+  maxDelayMs?: number;
+  /** Jitter strategy for retry delays (default: 'none') */
+  jitter?: DrainRetryJitter;
+  /** Per-attempt timeout in milliseconds */
+  perAttemptTimeoutMs?: number;
+};
+
+/**
+ * Queue strategy when buffered events hit capacity
+ */
+export type DrainQueueStrategy = 'drop-oldest' | 'drop-newest' | 'block' | 'sample';
+
+/**
+ * Queue configuration for batched drains
+ */
+export type DrainQueueConfig = {
+  /** Maximum buffered events before applying strategy */
+  maxItems?: number;
+  /** Strategy to apply when queue is full (default: 'drop-newest') */
+  strategy?: DrainQueueStrategy;
+  /** Keep rate when strategy is 'sample' (0..1, default: 0.5) */
+  sampleRate?: number;
+};
+
+/**
+ * Telemetry event emitted by drain internals
+ */
+export type DrainTelemetryEvent = {
+  /** Metric name */
+  metric: string;
+  /** Metric value */
+  value: number;
+  /** ISO timestamp */
+  ts: string;
+  /** Metric tags */
+  tags?: Record<string, string>;
+};
+
+/**
+ * Telemetry configuration for drains
+ */
+export type DrainTelemetryConfig = {
+  /** Sink receiving telemetry metrics */
+  sink: Sink<DrainTelemetryEvent>;
+  /** Optional metric prefix (default: 'typedlog.drain') */
+  prefix?: string;
+  /** Static tags attached to every metric */
+  tags?: Record<string, string>;
+};
+
+/**
+ * Failed drain batch payload
+ */
+export type DrainFailure<Context = unknown, Payload = unknown> = {
+  /** Failure reason */
+  reason: string;
+  /** Attempts performed */
+  attempts: number;
+  /** Failure timestamp */
+  failedAt: string;
+  /** Failed events */
+  events: Envelope<Context, Payload>[];
+  /** Optional error message */
+  error?: string;
+};
+
+/**
+ * Replay options for dead-letter sources
+ */
+export type DrainReplayOptions = {
+  /** Max events per second */
+  maxPerSecond?: number;
+};
+
+/**
+ * Replay result summary
+ */
+export type DrainReplayResult = {
+  /** Number of replayed events */
+  replayed: number;
+  /** Number of failed batches */
+  failed: number;
+};
+
+/**
+ * Datadog site identifier
+ */
+export type DatadogSite = 'us1' | 'us3' | 'us5' | 'eu1' | 'ap1' | 'ap2' | 'us1-fed';
+
+/**
  * Configuration for drains
  */
 export type DrainConfig = {
@@ -374,6 +613,153 @@ export type DrainConfig = {
   batchSize?: number;
   /** Flush interval in ms */
   flushInterval?: number;
+  /** Retry configuration */
+  retry?: DrainRetryConfig;
+  /** Queue backpressure configuration */
+  queue?: DrainQueueConfig;
+  /** Delivery telemetry configuration */
+  telemetry?: DrainTelemetryConfig;
+  /** Sink receiving permanently failed batches */
+  deadLetterSink?: Sink<DrainFailure<unknown, unknown>>;
+};
+
+/**
+ * Datadog drain configuration
+ */
+export type DatadogDrainConfig = {
+  /** Explicit Datadog logs endpoint */
+  endpoint?: string;
+  /** Datadog API key */
+  apiKey?: string;
+  /** Datadog site (used when endpoint is not provided) */
+  site?: DatadogSite;
+  /** Service name attached to each log */
+  service?: string;
+  /** Hostname attached to each log */
+  host?: string;
+  /** Datadog tags, either comma-separated or list */
+  tags?: string | readonly string[];
+  /** Additional HTTP headers */
+  headers?: Record<string, string>;
+  /** Batch size for batching */
+  batchSize?: number;
+  /** Flush interval in ms */
+  flushInterval?: number;
+  /** Retry configuration */
+  retry?: DrainRetryConfig;
+  /** Queue backpressure configuration */
+  queue?: DrainQueueConfig;
+  /** Delivery telemetry configuration */
+  telemetry?: DrainTelemetryConfig;
+  /** Sink receiving permanently failed batches */
+  deadLetterSink?: Sink<DrainFailure<unknown, unknown>>;
+};
+
+/**
+ * Loki basic auth credentials
+ */
+export type LokiBasicAuth = {
+  /** Loki username */
+  username: string;
+  /** Loki password */
+  password: string;
+};
+
+/**
+ * Loki drain configuration
+ */
+export type LokiDrainConfig = {
+  /** Loki push endpoint */
+  endpoint?: string;
+  /** Bearer token for authentication */
+  bearerToken?: string;
+  /** Basic auth credentials */
+  basicAuth?: LokiBasicAuth;
+  /** Multi-tenant org identifier */
+  tenantId?: string;
+  /** Static labels attached to each stream */
+  labels?: Record<string, string>;
+  /** Include event name label on each stream */
+  includeEventNameLabel?: boolean;
+  /** Service label value */
+  service?: string;
+  /** Additional HTTP headers */
+  headers?: Record<string, string>;
+  /** Batch size for batching */
+  batchSize?: number;
+  /** Flush interval in ms */
+  flushInterval?: number;
+  /** Retry configuration */
+  retry?: DrainRetryConfig;
+  /** Queue backpressure configuration */
+  queue?: DrainQueueConfig;
+  /** Delivery telemetry configuration */
+  telemetry?: DrainTelemetryConfig;
+  /** Sink receiving permanently failed batches */
+  deadLetterSink?: Sink<DrainFailure<unknown, unknown>>;
+};
+
+/**
+ * Better Stack drain configuration
+ */
+export type BetterStackDrainConfig = {
+  /** Better Stack ingest endpoint */
+  endpoint?: string;
+  /** Better Stack source token */
+  sourceToken?: string;
+  /** Service metadata attached to each log */
+  service?: string;
+  /** Host metadata attached to each log */
+  host?: string;
+  /** Source metadata attached to each log */
+  source?: string;
+  /** Additional HTTP headers */
+  headers?: Record<string, string>;
+  /** Batch size for batching */
+  batchSize?: number;
+  /** Flush interval in ms */
+  flushInterval?: number;
+  /** Retry configuration */
+  retry?: DrainRetryConfig;
+  /** Queue backpressure configuration */
+  queue?: DrainQueueConfig;
+  /** Delivery telemetry configuration */
+  telemetry?: DrainTelemetryConfig;
+  /** Sink receiving permanently failed batches */
+  deadLetterSink?: Sink<DrainFailure<unknown, unknown>>;
+};
+
+/**
+ * Registry compatibility issue
+ */
+export type RegistryCompatibilityIssue = {
+  event: string;
+  type:
+    | 'added'
+    | 'removed'
+    | 'kind-changed'
+    | 'fingerprint-changed'
+    | 'fingerprint-without-version-bump';
+  message: string;
+};
+
+/**
+ * Registry compatibility report
+ */
+export type RegistryCompatibilityReport = {
+  compatible: boolean;
+  issues: RegistryCompatibilityIssue[];
+};
+
+/**
+ * Policy simulation result
+ */
+export type PolicySimulationResult<Context = unknown, Payload = unknown> = {
+  accepted: boolean;
+  warnings: string[];
+  piiFindings: PiiFinding[];
+  envelope?: Envelope<Context, Payload>;
+  redacted?: Envelope<Context, Payload>;
 };
 
 /**

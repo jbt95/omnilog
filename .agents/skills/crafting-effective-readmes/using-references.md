@@ -7,6 +7,7 @@ Templates are your primary tool for writing READMEs. References provide depth - 
 ---
 
 ### art-of-readme.md
+
 `references/art-of-readme.md`
 
 **Why:** The philosophy behind great READMEs - understanding how readers actually scan and evaluate projects
@@ -15,6 +16,7 @@ Templates are your primary tool for writing READMEs. References provide depth - 
 ---
 
 ### make-a-readme.md
+
 `references/make-a-readme.md`
 
 **Why:** Practical, section-by-section guidance for what to include
@@ -23,13 +25,13 @@ Templates are your primary tool for writing READMEs. References provide depth - 
 ---
 
 ### standard-readme-spec.md
+
 `references/standard-readme-spec.md`
 
 **Why:** Formal specification when consistency or compliance matters
 **What:** Required vs optional sections, exact ordering, formatting rules. Useful for OSS projects wanting a standardized format.
 
 Examples:
+
 - `references/standard-readme-example-minimal.md` - Bare minimum compliant README
 - `references/standard-readme-example-maximal.md` - Full-featured with badges, ToC, all optional sections
-
-

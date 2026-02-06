@@ -5,16 +5,21 @@
 
 import { z } from 'zod';
 import type {
+  ContextEnricher,
   ContextManager,
   Envelope,
   EventByName,
   EventDefAny,
   Policy,
+  PiiFinding,
   Registry,
   Sink,
+  TraceContext,
+  TracingOptions,
 } from './types.js';
 import { CreateContext } from './context.js';
 import { ApplyRedaction } from './redaction.js';
+import { DetectPii } from './pii-guard.js';
 
 /**
  * Event accumulator for building up context over time
@@ -79,6 +84,19 @@ export type LoggerOptions<Context> = {
   policy?: Policy;
   /** Custom context manager */
   context?: ContextManager<Context>;
+  /** Context enrichers applied at emit time */
+  enrichers?: readonly ContextEnricher<Context>[];
+  /** Tracing integration */
+  tracing?: TracingOptions<Context>;
+  /** Internal shared runtime */
+  runtime?: LoggerRuntimeState;
+};
+
+export type LoggerRuntimeState = {
+  now?: () => number;
+  random?: () => number;
+  rateLimitBuckets?: Map<string, { tokens: number; lastRefillMs: number }>;
+  deprecationWarnings?: Set<string>;
 };
 
 export function CreateLogger<
@@ -94,6 +112,12 @@ export function CreateLogger<
   const contextManager = options.context ?? CreateContext(registry.contextSchema);
   const sinks = options.sinks ?? [];
   const policy = options.policy;
+  const enrichers = options.enrichers ?? [];
+  const tracing = options.tracing;
+  const runtimeNow = options.runtime?.now ?? Date.now;
+  const runtimeRandom = options.runtime?.random ?? Math.random;
+  const rateLimitBuckets = options.runtime?.rateLimitBuckets ?? new Map();
+  const deprecationWarnings = options.runtime?.deprecationWarnings ?? new Set<string>();
 
   function ValidateContext(context: Context): Context {
     const result = registry.contextSchema.safeParse(context);
@@ -112,12 +136,191 @@ export function CreateLogger<
     }
   }
 
-  function ShouldSample(): boolean {
-    if (!policy?.sample) return true;
-    const { rate = 1 } = policy.sample;
+  function WarnDeprecation(event: EventDefAny): void {
+    if (!event.deprecated) return;
+    if (deprecationWarnings.has(event.name)) return;
+    deprecationWarnings.add(event.name);
+    console.warn(
+      `Event "${event.name}" is deprecated${
+        event.deprecationMessage ? `: ${event.deprecationMessage}` : ''
+      }`,
+    );
+  }
+
+  function ParseTraceParent(traceparent: string): TraceContext | undefined {
+    const match = traceparent
+      .trim()
+      .match(/^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/i);
+    if (!match) return undefined;
+    const traceId = match[2];
+    const spanId = match[3];
+    const traceFlags = match[4];
+    if (!traceId || !spanId || !traceFlags) return undefined;
+    return {
+      traceId: traceId.toLowerCase(),
+      spanId: spanId.toLowerCase(),
+      traceFlags: traceFlags.toLowerCase(),
+      traceparent,
+    };
+  }
+
+  function ResolveTraceContext(context: Partial<Context>): TraceContext | undefined {
+    const configuredTraceContext = tracing?.GetTraceContext?.();
+    if (configuredTraceContext) return configuredTraceContext;
+
+    const contextRecord = context as Record<string, unknown>;
+    const contextTraceParent =
+      typeof contextRecord.traceparent === 'string' ? contextRecord.traceparent : undefined;
+    const parsedTraceParent = contextTraceParent ? ParseTraceParent(contextTraceParent) : undefined;
+
+    const traceId =
+      typeof contextRecord.traceId === 'string'
+        ? contextRecord.traceId
+        : parsedTraceParent?.traceId;
+    const spanId =
+      typeof contextRecord.spanId === 'string' ? contextRecord.spanId : parsedTraceParent?.spanId;
+    const traceFlags =
+      typeof contextRecord.traceFlags === 'string'
+        ? contextRecord.traceFlags
+        : parsedTraceParent?.traceFlags;
+
+    if (!traceId && !spanId && !traceFlags && !contextTraceParent) {
+      return undefined;
+    }
+
+    return {
+      ...(traceId ? { traceId } : {}),
+      ...(spanId ? { spanId } : {}),
+      ...(traceFlags ? { traceFlags } : {}),
+      ...(contextTraceParent ? { traceparent: contextTraceParent } : {}),
+    };
+  }
+
+  function ApplyTracingContext(context: Partial<Context>): Partial<Context> {
+    if (!tracing?.injectTraceContext) return context;
+    const traceContext = ResolveTraceContext(context);
+    if (!traceContext) return context;
+
+    const mappedTraceContext = tracing.MapTraceContext
+      ? tracing.MapTraceContext(traceContext)
+      : (traceContext as Partial<Context>);
+
+    return { ...context, ...mappedTraceContext };
+  }
+
+  function ApplyEnrichers(
+    event: EventDefAny,
+    context: Partial<Context>,
+    payload: unknown,
+    ts: string,
+  ): Partial<Context> {
+    if (enrichers.length === 0) return context;
+
+    let enrichedContext = { ...context };
+
+    for (const enricher of enrichers) {
+      try {
+        const fragment = enricher({
+          name: event.name,
+          kind: event.kind,
+          ts,
+          context: enrichedContext,
+          payload,
+          ...(event.level !== undefined ? { level: event.level } : {}),
+        });
+
+        if (!fragment) continue;
+        enrichedContext = { ...enrichedContext, ...fragment };
+      } catch (error) {
+        console.error('Context enricher error:', error);
+      }
+    }
+
+    return enrichedContext;
+  }
+
+  function ResolveSamplingRate(event: EventDefAny, context: Context, payload: unknown): number {
+    const sampleConfig = policy?.sample;
+    if (!sampleConfig) return 1;
+
+    let resolvedRate = sampleConfig.rate ?? 1;
+
+    if (sampleConfig.rules) {
+      for (const rule of sampleConfig.rules) {
+        if (rule.event && rule.event !== event.name) continue;
+        if (rule.kind && rule.kind !== event.kind) continue;
+        if (rule.level && rule.level !== event.level) continue;
+        if (
+          rule.when &&
+          !rule.when({
+            event: event.name,
+            kind: event.kind,
+            context: context as unknown as Record<string, unknown>,
+            payload,
+            ...(event.level !== undefined ? { level: event.level } : {}),
+          })
+        ) {
+          continue;
+        }
+
+        resolvedRate = rule.rate;
+        break;
+      }
+    }
+
+    if (sampleConfig.adaptive && (event.level === 'error' || event.level === 'fatal')) {
+      resolvedRate = 1;
+    }
+
+    return Math.max(0, Math.min(1, resolvedRate));
+  }
+
+  function ShouldSample(event: EventDefAny, context: Context, payload: unknown): boolean {
+    const rate = ResolveSamplingRate(event, context, payload);
     if (rate >= 1) return true;
     if (rate <= 0) return false;
-    return Math.random() <= rate;
+    return runtimeRandom() <= rate;
+  }
+
+  function ShouldEmitWithinRateLimit(eventName: string): boolean {
+    const rateLimitConfig = policy?.rateLimit;
+    if (!rateLimitConfig) return true;
+
+    const rule = rateLimitConfig.rules.find((candidate) => candidate.event === eventName);
+    if (!rule) return true;
+
+    const burst = Math.max(1, rule.burst);
+    const refillRate = Math.max(0, rule.perSecond);
+    const nowMs = runtimeNow();
+    const existingBucket = rateLimitBuckets.get(eventName) ?? {
+      tokens: burst,
+      lastRefillMs: nowMs,
+    };
+    const elapsedSeconds = Math.max(0, (nowMs - existingBucket.lastRefillMs) / 1000);
+    const refilledTokens = Math.min(burst, existingBucket.tokens + elapsedSeconds * refillRate);
+    const nextBucket = {
+      tokens: refilledTokens,
+      lastRefillMs: nowMs,
+    };
+
+    if (nextBucket.tokens >= 1) {
+      nextBucket.tokens -= 1;
+      rateLimitBuckets.set(eventName, nextBucket);
+      return true;
+    }
+
+    rateLimitBuckets.set(eventName, nextBucket);
+
+    if (rateLimitConfig.onLimit === 'throw') {
+      throw new Error(`Rate limit exceeded for event "${eventName}"`);
+    }
+
+    return false;
+  }
+
+  function EvaluatePiiGuard(event: EventDefAny, payload: unknown): PiiFinding[] {
+    if (!policy?.piiGuard) return [];
+    return DetectPii(payload, event.tags, policy.piiGuard);
   }
 
   function EmitEvent<Event extends Events[number]>(
@@ -130,15 +333,34 @@ export function CreateLogger<
       throw new Error(`Invalid payload for ${event.name}: ${payloadResult.error.message}`);
     }
 
+    WarnDeprecation(event);
+
+    const piiFindings = EvaluatePiiGuard(event, payloadResult.data);
+    if (piiFindings.length > 0) {
+      const piiMessage = `PII guard detected sensitive values for event "${event.name}" at ${piiFindings
+        .map((finding) => finding.path)
+        .join(', ')}`;
+      if (policy?.piiGuard?.mode === 'block') {
+        throw new Error(piiMessage);
+      }
+      console.warn(piiMessage);
+    }
+
     const baseContext = contextManager.Get() ?? ({} as Context);
-    const mergedContext = { ...baseContext, ...overrideContext } as Context;
-    const parsedContext = ValidateContext(mergedContext);
+    const mergedContext = { ...baseContext, ...overrideContext } as Partial<Context>;
+    const timestamp = new Date().toISOString();
+    const tracedContext = ApplyTracingContext(mergedContext);
+    const enrichedContext = ApplyEnrichers(event, tracedContext, payloadResult.data, timestamp);
+    const parsedContext = ValidateContext(enrichedContext as Context);
     EnsureRequiredContext(event, parsedContext);
+
+    if (!ShouldEmitWithinRateLimit(event.name)) return null;
+    if (!ShouldSample(event, parsedContext, payloadResult.data)) return null;
 
     const envelope: Envelope<Context, z.output<Event['schema']>> = {
       kind: event.kind,
       name: event.name,
-      ts: new Date().toISOString(),
+      ts: timestamp,
       schema: {
         fingerprint: event.fingerprint,
         ...(event.version !== undefined ? { version: event.version } : {}),
@@ -148,8 +370,6 @@ export function CreateLogger<
       ...(event.level !== undefined ? { level: event.level } : {}),
       ...(event.tags !== undefined ? { tags: event.tags } : {}),
     };
-
-    if (!ShouldSample()) return null;
 
     const redacted = ApplyRedaction(
       envelope as unknown as Record<string, unknown>,
@@ -215,9 +435,7 @@ export function CreateLogger<
       }, {} as Partial<Context>);
 
       const payloadWithErrors =
-        errors.length > 0
-          ? { ...(payload as Record<string, unknown>), _errors: errors }
-          : payload;
+        errors.length > 0 ? { ...(payload as Record<string, unknown>), _errors: errors } : payload;
 
       return EmitEvent(
         event as unknown as Events[number],

@@ -71,13 +71,13 @@ function Sanitize(value: unknown): JsonValue {
 
 /**
  * Generate a fingerprint for a Zod schema
- * 
+ *
  * The fingerprint is a hash of the schema's JSON Schema representation,
  * used for versioning and detecting schema changes.
- * 
+ *
  * @param schema - Zod schema to fingerprint
  * @returns 12-character hexadecimal fingerprint
- * 
+ *
  * @example
  * ```typescript
  * const schema = z.object({ id: z.string(), count: z.number() });

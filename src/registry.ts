@@ -12,6 +12,8 @@ import type {
   EventDefExport,
   EventOptions,
   EventsByName,
+  RegistryCompatibilityIssue,
+  RegistryCompatibilityReport,
   Registry,
   RegistryBuilder,
   RegistryEventOptions,
@@ -45,18 +47,22 @@ function CreateRegistryBuilder<ContextSchema extends z.ZodObject<z.ZodRawShape>>
     name: Name,
     schema: Schema,
     options: RegistryEventOptions<ContextSchema, Schema, Kind, Require>,
-  ): EventDef<Name, Kind, Schema, Require, RegistryEventOptions<
-    ContextSchema,
-    Schema,
+  ): EventDef<
+    Name,
     Kind,
-    Require
-  >['tags']> {
-    return DefineEvent(name, schema, options as EventOptions<Kind, Require, RegistryEventOptions<
-      ContextSchema,
-      Schema,
-      Kind,
-      Require
-    >['tags']>);
+    Schema,
+    Require,
+    RegistryEventOptions<ContextSchema, Schema, Kind, Require>['tags']
+  > {
+    return DefineEvent(
+      name,
+      schema,
+      options as EventOptions<
+        Kind,
+        Require,
+        RegistryEventOptions<ContextSchema, Schema, Kind, Require>['tags']
+      >,
+    );
   }
 
   return {
@@ -113,6 +119,10 @@ export function DefineEvent<
     ...(options.level !== undefined ? { level: options.level } : {}),
     ...(options.require !== undefined ? { require: options.require } : {}),
     ...(options.tags !== undefined ? { tags: options.tags } : {}),
+    ...(options.deprecated !== undefined ? { deprecated: options.deprecated } : {}),
+    ...(options.deprecationMessage !== undefined
+      ? { deprecationMessage: options.deprecationMessage }
+      : {}),
     ...(options.description !== undefined ? { description: options.description } : {}),
   };
 }
@@ -158,8 +168,7 @@ export function CreateRegistry<
       ) => Events & EnforceRequiredKeys<Events, z.output<ContextSchema>>),
 ): Registry<ContextSchema, Events> {
   const registryBuilder = CreateRegistryBuilder(contextSchema);
-  const resolvedEvents =
-    typeof events === 'function' ? events(registryBuilder) : events;
+  const resolvedEvents = typeof events === 'function' ? events(registryBuilder) : events;
   const eventsByName = {} as EventsByName<Events>;
 
   for (const event of resolvedEvents) {
@@ -200,6 +209,10 @@ function ExportEvent(event: EventDefAny): EventDefExport {
     ...(event.level !== undefined ? { level: event.level } : {}),
     ...(event.require !== undefined ? { require: event.require } : {}),
     ...(event.tags !== undefined ? { tags: event.tags } : {}),
+    ...(event.deprecated !== undefined ? { deprecated: event.deprecated } : {}),
+    ...(event.deprecationMessage !== undefined
+      ? { deprecationMessage: event.deprecationMessage }
+      : {}),
     ...(event.description !== undefined ? { description: event.description } : {}),
   };
 }
@@ -224,5 +237,78 @@ export function ExportRegistry(
   return {
     version,
     events: registry.events.map(ExportEvent),
+  };
+}
+
+/**
+ * Compare an exported registry version with a current registry.
+ *
+ * Detects removals and breaking schema changes.
+ */
+export function CompareRegistry(
+  previous: RegistryExport,
+  current: Registry<z.ZodObject<z.ZodRawShape>, readonly EventDefAny[]>,
+): RegistryCompatibilityReport {
+  const issues: RegistryCompatibilityIssue[] = [];
+  const previousByName = new Map(previous.events.map((event) => [event.name, event]));
+  const currentByName = new Map(current.events.map((event) => [event.name, event]));
+
+  for (const previousEvent of previous.events) {
+    const currentEvent = currentByName.get(previousEvent.name);
+    if (!currentEvent) {
+      issues.push({
+        event: previousEvent.name,
+        type: 'removed',
+        message: `Event "${previousEvent.name}" was removed`,
+      });
+      continue;
+    }
+
+    if (previousEvent.kind !== currentEvent.kind) {
+      issues.push({
+        event: previousEvent.name,
+        type: 'kind-changed',
+        message: `Event "${previousEvent.name}" changed kind from "${previousEvent.kind}" to "${currentEvent.kind}"`,
+      });
+    }
+
+    if (previousEvent.fingerprint !== currentEvent.fingerprint) {
+      issues.push({
+        event: previousEvent.name,
+        type: 'fingerprint-changed',
+        message: `Event "${previousEvent.name}" changed schema fingerprint`,
+      });
+
+      const previousVersion = previousEvent.schemaVersion;
+      const currentVersion = currentEvent.version;
+      if (!previousVersion || !currentVersion || previousVersion === currentVersion) {
+        issues.push({
+          event: previousEvent.name,
+          type: 'fingerprint-without-version-bump',
+          message: `Event "${previousEvent.name}" changed schema without a version bump`,
+        });
+      }
+    }
+  }
+
+  for (const currentEvent of current.events) {
+    if (!previousByName.has(currentEvent.name)) {
+      issues.push({
+        event: currentEvent.name,
+        type: 'added',
+        message: `Event "${currentEvent.name}" was added`,
+      });
+    }
+  }
+
+  const incompatibleIssueTypes = new Set([
+    'removed',
+    'kind-changed',
+    'fingerprint-without-version-bump',
+  ]);
+
+  return {
+    compatible: !issues.some((issue) => incompatibleIssueTypes.has(issue.type)),
+    issues,
   };
 }
