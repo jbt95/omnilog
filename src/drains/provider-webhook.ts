@@ -1,4 +1,5 @@
 import type { Drain, DrainConfig } from '../types.js';
+import { CreateDomainError } from '../error.js';
 
 export type WebhookDrainConfig = DrainConfig & { url: string };
 
@@ -18,7 +19,11 @@ export function CreateWebhookDrain(config: WebhookDrainConfig): Drain {
       });
 
       if (!response.ok) {
-        throw new Error(`Webhook drain failed: ${response.status} ${response.statusText}`);
+        throw CreateDomainError('drain', 'DRAIN_HTTP_FAILURE', 'Webhook drain request failed', {
+          statusCode: response.status,
+          details: { provider: 'webhook', statusText: response.statusText, endpoint: config.url },
+          retryable: response.status >= 500,
+        });
       }
     } catch (error) {
       console.error('Webhook drain error:', error);

@@ -43,5 +43,6 @@ describe('Index Exports', function IndexExportsSuite() {
     expect(typeof Redaction.Policy).toBe('function');
     expect(typeof LogError.Create).toBe('function');
     expect(typeof LogError.Parse).toBe('function');
+    expect(typeof LogError.Domain).toBe('function');
   });
 });

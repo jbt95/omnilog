@@ -6,6 +6,7 @@ describe('Error', function ErrorSuite() {
     const error = LogError.Create({
       message: 'Payment processing failed',
       code: 'PAYMENT_ERROR',
+      domain: 'integration',
       reason: 'The payment gateway returned a timeout',
       resolution: 'Retry the payment or use a different method',
       documentation: 'https://docs.example.com/errors/payment',
@@ -14,6 +15,7 @@ describe('Error', function ErrorSuite() {
     expect(error).toBeInstanceOf(LogError.Typed);
     expect(error.message).toBe('Payment processing failed');
     expect(error.code).toBe('PAYMENT_ERROR');
+    expect(error.domain).toBe('integration');
     expect(error.reason).toBe('The payment gateway returned a timeout');
     expect(error.resolution).toBe('Retry the payment or use a different method');
     expect(error.documentation).toBe('https://docs.example.com/errors/payment');
@@ -42,6 +44,7 @@ describe('Error', function ErrorSuite() {
     expect(typedError).toBeInstanceOf(LogError.Typed);
     expect(typedError.message).toBe('Something went wrong');
     expect(typedError.code).toBe('UNKNOWN_ERROR');
+    expect(typedError.domain).toBe('unknown');
   });
 
   it('parses non-error values into typed errors', function ParsesNonErrorValuesIntoTypedErrors() {
@@ -50,6 +53,14 @@ describe('Error', function ErrorSuite() {
     expect(typedError).toBeInstanceOf(LogError.Typed);
     expect(typedError.message).toBe('boom');
     expect(typedError.code).toBe('UNKNOWN_ERROR');
+    expect(typedError.domain).toBe('unknown');
+  });
+
+  it('creates domain errors with stable code and domain', function CreatesDomainErrorsWithStableCodeAndDomain() {
+    const error = LogError.Domain('logger', 'LOGGER_UNKNOWN_EVENT', 'Unknown event: foo');
+    expect(error).toBeInstanceOf(LogError.Typed);
+    expect(error.code).toBe('LOGGER_UNKNOWN_EVENT');
+    expect(error.domain).toBe('logger');
   });
 
   it('converts error to JSON', function ConvertsErrorToJson() {

@@ -47,4 +47,18 @@ describe('Framework', function FrameworkSuite() {
 
     expect(target.flushCount).toBe(2);
   });
+
+  it('throws typed errors for invalid request context', function ThrowsTypedErrorsForInvalidRequestContext() {
+    const contextSchema = z.object({ userId: z.string() }).passthrough();
+    const contextManager = Context.Request(contextSchema);
+
+    expect(() =>
+      contextManager.Run({ userId: 1 } as unknown as z.output<typeof contextSchema>, () => null),
+    ).toThrowError(
+      expect.objectContaining({
+        code: 'CONTEXT_INVALID',
+        domain: 'framework',
+      }),
+    );
+  });
 });

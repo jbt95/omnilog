@@ -14,7 +14,12 @@ describe('Registry', function RegistrySuite() {
             registry.DefineEvent('duplicate.event', z.object({ id: z.string() }), { kind: 'log' }),
           ] as const,
       ),
-    ).toThrow('Duplicate event name');
+    ).toThrowError(
+      expect.objectContaining({
+        code: 'REGISTRY_DUPLICATE_EVENT',
+        domain: 'registry',
+      }),
+    );
   });
 
   it('exports registry with JSON schemas', function ExportsRegistryWithJsonSchemas() {

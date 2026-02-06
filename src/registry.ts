@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { SchemaFingerprint } from './fingerprint.js';
+import { CreateDomainError } from './error.js';
 import type {
   EventDef,
   EventDefAny,
@@ -173,7 +174,15 @@ export function CreateRegistry<
 
   for (const event of resolvedEvents) {
     if ((eventsByName as Record<string, Events[number]>)[event.name]) {
-      throw new Error(`Duplicate event name: ${event.name}`);
+      throw CreateDomainError(
+        'registry',
+        'REGISTRY_DUPLICATE_EVENT',
+        `Duplicate event name: ${event.name}`,
+        {
+          details: { eventName: event.name },
+          resolution: 'Use unique event names in Registry.Create(...).',
+        },
+      );
     }
 
     (eventsByName as Record<string, Events[number]>)[event.name] = event;

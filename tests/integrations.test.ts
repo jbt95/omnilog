@@ -187,4 +187,144 @@ describe('Integrations', function IntegrationsSuite() {
     expect(memory.events[0]?.context.path).toBe('/nest');
     expect(memory.events[0]?.context.requestId).toBe('req-nest');
   });
+
+  it('express middleware captures thrown user errors as internal events', async function ExpressMiddlewareCapturesThrownUserErrorsAsInternalEvents() {
+    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const middleware = Middleware.Express(loggerFactory);
+    const req = {
+      method: 'GET',
+      originalUrl: '/express-error',
+      header: () => undefined,
+    } as unknown as Request;
+
+    expect(() =>
+      middleware(
+        req,
+        {} as Response,
+        (() => {
+          throw new Error('express boom');
+        }) as NextFunction,
+      ),
+    ).toThrow('express boom');
+
+    expect(memory.events).toHaveLength(1);
+    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
+    expect(payload?.source).toBe('integration.express');
+    expect(payload?.message).toBe('express boom');
+  });
+
+  it('hono middleware captures thrown user errors as internal events', async function HonoMiddlewareCapturesThrownUserErrorsAsInternalEvents() {
+    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const middleware = Middleware.Hono(loggerFactory);
+    const context = {
+      req: {
+        method: 'POST',
+        url: 'https://example.com/hono-error',
+        path: '/hono-error',
+        header: () => undefined,
+      },
+      set: () => {},
+    } as unknown as HonoContext;
+
+    await expect(
+      middleware(
+        context,
+        (async () => {
+          throw new Error('hono boom');
+        }) as HonoNext,
+      ),
+    ).rejects.toThrow('hono boom');
+
+    expect(memory.events).toHaveLength(1);
+    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
+    expect(payload?.source).toBe('integration.hono');
+    expect(payload?.message).toBe('hono boom');
+  });
+
+  it('lambda handler captures thrown user errors as internal events', async function LambdaHandlerCapturesThrownUserErrorsAsInternalEvents() {
+    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const handler = Handler.Lambda(loggerFactory, async () => {
+      throw new Error('lambda boom');
+    });
+
+    const event = {
+      rawPath: '/lambda-error',
+      requestContext: {
+        requestId: 'aws-error',
+        http: { method: 'GET', path: '/lambda-error', sourceIp: '1.2.3.4', userAgent: 'ua' },
+      },
+    } as unknown as APIGatewayProxyEventV2;
+
+    await expect(handler(event, { awsRequestId: 'ctx' } as LambdaContext)).rejects.toThrow(
+      'lambda boom',
+    );
+
+    expect(memory.events).toHaveLength(1);
+    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
+    expect(payload?.source).toBe('integration.lambda');
+    expect(payload?.message).toBe('lambda boom');
+  });
+
+  it('worker handler captures thrown user errors as internal events', async function WorkerHandlerCapturesThrownUserErrorsAsInternalEvents() {
+    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const handler = Handler.Worker(loggerFactory, async () => {
+      throw new Error('worker boom');
+    });
+    const request = new Request('https://example.com/worker-error');
+    const ctx = {
+      waitUntil: () => {},
+      passThroughOnException: () => {},
+    } as unknown as WorkerExecutionContext;
+
+    await expect(handler(request, {}, ctx)).rejects.toThrow('worker boom');
+
+    expect(memory.events).toHaveLength(1);
+    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
+    expect(payload?.source).toBe('integration.worker');
+    expect(payload?.message).toBe('worker boom');
+  });
+
+  it('nestjs interceptor captures thrown user errors as internal events', async function NestjsInterceptorCapturesThrownUserErrorsAsInternalEvents() {
+    const { loggerFactory, memory } = CreateTestLoggerFactory();
+    const moduleDefinition = TypedLogModule.forRoot({ loggerFactory });
+    const providers = (moduleDefinition.providers ?? []) as Provider[];
+    const interceptorProvider = providers.find((provider): provider is ValueProvider => {
+      return (
+        typeof provider === 'object' &&
+        provider !== null &&
+        'provide' in provider &&
+        provider.provide === APP_INTERCEPTOR
+      );
+    });
+    const interceptor = interceptorProvider?.useValue as {
+      intercept: (context: ExecutionContext, next: { handle: () => unknown }) => unknown;
+    };
+
+    const request = {
+      method: 'GET',
+      originalUrl: '/nest-error',
+      header: () => undefined,
+    } as unknown as Request;
+
+    expect(() =>
+      interceptor.intercept(
+        { switchToHttp: () => ({ getRequest: () => request }) } as ExecutionContext,
+        {
+          handle: () => {
+            throw new Error('nest boom');
+          },
+        },
+      ),
+    ).toThrow('nest boom');
+
+    expect(memory.events).toHaveLength(1);
+    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
+    expect(payload?.source).toBe('integration.nestjs');
+    expect(payload?.message).toBe('nest boom');
+  });
 });

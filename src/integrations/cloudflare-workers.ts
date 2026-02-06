@@ -65,6 +65,20 @@ export function CreateWorkerHandler<
 ): (request: Request, env: Env, ctx: ExecutionContext) => Result | Promise<Result> {
   return (request, env, ctx) => {
     const mergedContext = BuildContext(request, env, ctx, options) as z.output<ContextSchema>;
-    return loggerFactory.Scoped(mergedContext, (logger) => handler(request, env, ctx, logger));
+    return loggerFactory.Scoped(mergedContext, async (logger) => {
+      try {
+        return await handler(request, env, ctx, logger);
+      } catch (error) {
+        logger.CaptureError(error, {
+          source: 'integration.worker',
+          details: {
+            method: request.method,
+            path: new URL(request.url).pathname,
+            requestId: mergedContext.requestId as string | undefined,
+          },
+        });
+        throw error;
+      }
+    });
   };
 }

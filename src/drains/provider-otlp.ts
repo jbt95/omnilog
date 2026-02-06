@@ -1,4 +1,5 @@
 import type { Drain, DrainConfig } from '../types.js';
+import { CreateDomainError } from '../error.js';
 
 function CreateOtlpTimeUnixNano(timestamp: string): string {
   const milliseconds = Date.parse(timestamp);
@@ -49,7 +50,11 @@ export function CreateOTLPDrain(config: DrainConfig): Drain {
       });
 
       if (!response.ok) {
-        throw new Error(`OTLP drain failed: ${response.status} ${response.statusText}`);
+        throw CreateDomainError('drain', 'DRAIN_HTTP_FAILURE', 'OTLP drain request failed', {
+          statusCode: response.status,
+          details: { provider: 'otlp', statusText: response.statusText, endpoint },
+          retryable: response.status >= 500,
+        });
       }
     } catch (error) {
       console.error('OTLP drain error:', error);

@@ -5,11 +5,14 @@
 
 import { z } from 'zod';
 import type {
+  CapturedErrorOptions,
   ContextEnricher,
   ContextManager,
   Envelope,
+  ErrorCaptureOptions,
   EventByName,
   EventDefAny,
+  LogLevel,
   Policy,
   PiiFinding,
   Registry,
@@ -18,6 +21,7 @@ import type {
   TracingOptions,
 } from './types.js';
 import { CreateContext } from './context.js';
+import { CreateDomainError, ParseError } from './error.js';
 import { ApplyRedaction } from './redaction.js';
 import { DetectPii } from './pii-guard.js';
 
@@ -46,6 +50,8 @@ export type LoggerInstance<
     overrideContext?: Partial<z.output<ContextSchema>>,
   ) => Envelope<z.output<ContextSchema>, z.output<EventByName<Events, Name>['schema']>> | null;
   Accumulate: () => EventAccumulator<z.output<ContextSchema>>;
+  /** Capture an error into the internal error event stream */
+  CaptureError: (error: unknown, options?: CapturedErrorOptions) => void;
   Run: ContextManager<z.output<ContextSchema>>['Run'];
 };
 
@@ -88,6 +94,8 @@ export type LoggerOptions<Context> = {
   enrichers?: readonly ContextEnricher<Context>[];
   /** Tracing integration */
   tracing?: TracingOptions<Context>;
+  /** Capture thrown logger errors as internal events */
+  captureErrorsAsEvent?: boolean | ErrorCaptureOptions;
   /** Internal shared runtime */
   runtime?: LoggerRuntimeState;
 };
@@ -114,15 +122,117 @@ export function CreateLogger<
   const policy = options.policy;
   const enrichers = options.enrichers ?? [];
   const tracing = options.tracing;
+  const errorCapture = CreateErrorCaptureOptions(options.captureErrorsAsEvent);
   const runtimeNow = options.runtime?.now ?? Date.now;
   const runtimeRandom = options.runtime?.random ?? Math.random;
   const rateLimitBuckets = options.runtime?.rateLimitBuckets ?? new Map();
   const deprecationWarnings = options.runtime?.deprecationWarnings ?? new Set<string>();
+  let isCapturingErrorEvent = false;
+
+  function CreateErrorCaptureOptions(
+    input: boolean | ErrorCaptureOptions | undefined,
+  ): {
+    enabled: boolean;
+    eventName: string;
+    level: LogLevel;
+    includeContext: boolean;
+    includeStack: boolean;
+  } {
+    if (!input) {
+      return {
+        enabled: false,
+        eventName: 'typedlog.internal.error',
+        level: 'error',
+        includeContext: true,
+        includeStack: true,
+      };
+    }
+
+    if (typeof input === 'boolean') {
+      return {
+        enabled: input,
+        eventName: 'typedlog.internal.error',
+        level: 'error',
+        includeContext: true,
+        includeStack: true,
+      };
+    }
+
+    return {
+      enabled: input.enabled ?? true,
+      eventName: input.eventName?.trim() || 'typedlog.internal.error',
+      level: input.level ?? 'error',
+      includeContext: input.includeContext ?? true,
+      includeStack: input.includeStack ?? true,
+    };
+  }
+
+  function CaptureErrorAsEvent(
+    error: unknown,
+    source: string,
+    details?: Record<string, unknown>,
+    force = false,
+  ): void {
+    if ((!errorCapture.enabled && !force) || isCapturingErrorEvent) return;
+    isCapturingErrorEvent = true;
+
+    try {
+      const parsed = ParseError(error);
+      const payload = {
+        message: parsed.message,
+        ...(parsed.code ? { code: parsed.code } : {}),
+        ...(parsed.domain ? { domain: parsed.domain } : {}),
+        ...(parsed.reason ? { reason: parsed.reason } : {}),
+        ...(parsed.resolution ? { resolution: parsed.resolution } : {}),
+        ...(parsed.details ? { details: parsed.details } : {}),
+        ...(details ? { input: details } : {}),
+        source,
+        ...(errorCapture.includeStack && parsed.stack ? { stack: parsed.stack } : {}),
+      };
+
+      const capturedContext = errorCapture.includeContext
+        ? (contextManager.Get() ?? ({} as Context))
+        : ({} as Context);
+
+      const envelope: Envelope<Context, typeof payload> = {
+        kind: 'log',
+        name: errorCapture.eventName,
+        ts: new Date().toISOString(),
+        schema: {
+          fingerprint: 'typedlog.internal.error',
+          version: '1',
+        },
+        context: capturedContext,
+        payload,
+        level: errorCapture.level,
+      };
+
+      for (const sink of sinks) {
+        try {
+          const result = sink(envelope as Envelope<Context, unknown>);
+          void Promise.resolve(result).catch((sinkError) => {
+            console.error('Error capture sink error:', sinkError);
+          });
+        } catch (sinkError) {
+          console.error('Error capture sink error:', sinkError);
+        }
+      }
+    } finally {
+      isCapturingErrorEvent = false;
+    }
+  }
+
+  function CaptureError(error: unknown, options: CapturedErrorOptions = {}): void {
+    CaptureErrorAsEvent(error, options.source ?? 'manual', options.details, true);
+  }
 
   function ValidateContext(context: Context): Context {
     const result = registry.contextSchema.safeParse(context);
     if (!result.success) {
-      throw new Error(`Invalid context: ${result.error.message}`);
+      throw CreateDomainError('logger', 'LOGGER_INVALID_CONTEXT', 'Invalid context', {
+        reason: result.error.message,
+        resolution: 'Provide context that matches the registry context schema.',
+      });
     }
     return result.data;
   }
@@ -131,7 +241,15 @@ export function CreateLogger<
     if (!event.require || event.require.length === 0) return;
     for (const key of event.require) {
       if (context[key as keyof Context] === undefined) {
-        throw new Error(`Missing required context "${String(key)}" for event ${event.name}`);
+        throw CreateDomainError(
+          'logger',
+          'LOGGER_MISSING_REQUIRED_CONTEXT',
+          `Missing required context "${String(key)}" for event ${event.name}`,
+          {
+            details: { eventName: event.name, key: String(key) },
+            resolution: 'Set all required context fields before emitting the event.',
+          },
+        );
       }
     }
   }
@@ -312,7 +430,16 @@ export function CreateLogger<
     rateLimitBuckets.set(eventName, nextBucket);
 
     if (rateLimitConfig.onLimit === 'throw') {
-      throw new Error(`Rate limit exceeded for event "${eventName}"`);
+      throw CreateDomainError(
+        'logger',
+        'LOGGER_RATE_LIMIT_EXCEEDED',
+        `Rate limit exceeded for event "${eventName}"`,
+        {
+          details: { eventName },
+          resolution: 'Reduce emit frequency or increase rate limit capacity.',
+          retryable: true,
+        },
+      );
     }
 
     return false;
@@ -330,7 +457,16 @@ export function CreateLogger<
   ): Envelope<Context, z.output<Event['schema']>> | null {
     const payloadResult = event.schema.safeParse(payload);
     if (!payloadResult.success) {
-      throw new Error(`Invalid payload for ${event.name}: ${payloadResult.error.message}`);
+      throw CreateDomainError(
+        'logger',
+        'LOGGER_INVALID_PAYLOAD',
+        `Invalid payload for ${event.name}`,
+        {
+          reason: payloadResult.error.message,
+          details: { eventName: event.name },
+          resolution: 'Validate payload shape against the event schema.',
+        },
+      );
     }
 
     WarnDeprecation(event);
@@ -341,7 +477,10 @@ export function CreateLogger<
         .map((finding) => finding.path)
         .join(', ')}`;
       if (policy?.piiGuard?.mode === 'block') {
-        throw new Error(piiMessage);
+        throw CreateDomainError('logger', 'LOGGER_PII_GUARD_BLOCKED', piiMessage, {
+          details: { eventName: event.name, findings: piiFindings },
+          resolution: 'Tag sensitive fields or adjust piiGuard policy.',
+        });
       }
       console.warn(piiMessage);
     }
@@ -397,9 +536,19 @@ export function CreateLogger<
     payload: z.output<EventByName<Events, Name>['schema']>,
     overrideContext?: Partial<Context>,
   ): Envelope<Context, z.output<EventByName<Events, Name>['schema']>> | null {
-    const event = registry.eventsByName[name] as EventByName<Events, Name> | undefined;
-    if (!event) throw new Error(`Unknown event: ${String(name)}`);
-    return EmitEvent(event, payload, overrideContext);
+    try {
+      const event = registry.eventsByName[name] as EventByName<Events, Name> | undefined;
+      if (!event) {
+        throw CreateDomainError('logger', 'LOGGER_UNKNOWN_EVENT', `Unknown event: ${String(name)}`, {
+          details: { eventName: String(name) },
+          resolution: 'Define the event in Registry.Create(...) before emitting it.',
+        });
+      }
+      return EmitEvent(event, payload, overrideContext);
+    } catch (error) {
+      CaptureErrorAsEvent(error, 'emit', { eventName: String(name) });
+      throw error;
+    }
   }
 
   function Accumulate(): EventAccumulator<Context> {
@@ -426,22 +575,37 @@ export function CreateLogger<
       name: Name,
       payload: Payload,
     ): Envelope<Context, Payload> | null {
-      const event = registry.eventsByName[name] as EventByName<Events, Name> | undefined;
-      if (!event) throw new Error(`Unknown event: ${String(name)}`);
+      try {
+        const event = registry.eventsByName[name] as EventByName<Events, Name> | undefined;
+        if (!event) {
+          throw CreateDomainError(
+            'logger',
+            'LOGGER_UNKNOWN_EVENT',
+            `Unknown event: ${String(name)}`,
+            {
+              details: { eventName: String(name) },
+              resolution: 'Define the event in Registry.Create(...) before emitting it.',
+            },
+          );
+        }
 
-      const accumulatedContext = fragments.reduce((acc, { key, value }) => {
-        (acc as Record<string, unknown>)[key] = value;
-        return acc;
-      }, {} as Partial<Context>);
+        const accumulatedContext = fragments.reduce((acc, { key, value }) => {
+          (acc as Record<string, unknown>)[key] = value;
+          return acc;
+        }, {} as Partial<Context>);
 
-      const payloadWithErrors =
-        errors.length > 0 ? { ...(payload as Record<string, unknown>), _errors: errors } : payload;
+        const payloadWithErrors =
+          errors.length > 0 ? { ...(payload as Record<string, unknown>), _errors: errors } : payload;
 
-      return EmitEvent(
-        event as unknown as Events[number],
-        payloadWithErrors as z.output<Events[number]['schema']>,
-        accumulatedContext,
-      ) as Envelope<Context, Payload> | null;
+        return EmitEvent(
+          event as unknown as Events[number],
+          payloadWithErrors as z.output<Events[number]['schema']>,
+          accumulatedContext,
+        ) as Envelope<Context, Payload> | null;
+      } catch (error) {
+        CaptureErrorAsEvent(error, 'accumulate.emit', { eventName: String(name) });
+        throw error;
+      }
     }
 
     const accumulator: EventAccumulator<Context> = {
@@ -456,6 +620,7 @@ export function CreateLogger<
   return {
     Emit,
     Accumulate,
+    CaptureError,
     Run: contextManager.Run,
   };
 }

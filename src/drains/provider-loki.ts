@@ -1,4 +1,5 @@
 import type { Drain, Envelope, LokiDrainConfig } from '../types.js';
+import { CreateDomainError } from '../error.js';
 
 type LokiStream = {
   stream: Record<string, string>;
@@ -108,7 +109,11 @@ export function CreateLokiDrain(config: LokiDrainConfig): Drain {
       });
 
       if (!response.ok) {
-        throw new Error(`Loki drain failed: ${response.status} ${response.statusText}`);
+        throw CreateDomainError('drain', 'DRAIN_HTTP_FAILURE', 'Loki drain request failed', {
+          statusCode: response.status,
+          details: { provider: 'loki', statusText: response.statusText, endpoint },
+          retryable: response.status >= 500,
+        });
       }
     } catch (error) {
       console.error('Loki drain error:', error);

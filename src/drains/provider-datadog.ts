@@ -1,4 +1,5 @@
 import type { DatadogDrainConfig, DatadogSite, Drain } from '../types.js';
+import { CreateDomainError } from '../error.js';
 
 function CreateDatadogEndpoint(site: DatadogSite): string {
   const datadogSiteEndpoints: Record<DatadogSite, string> = {
@@ -33,7 +34,11 @@ export function CreateDatadogDrain(config: DatadogDrainConfig): Drain {
 
   return async (events) => {
     if (!apiKey) {
-      console.warn('Datadog drain: missing API key');
+      console.warn('Datadog drain: missing API key', {
+        code: 'DRAIN_CONFIGURATION_MISSING',
+        domain: 'drain',
+        provider: 'datadog',
+      });
       return;
     }
 
@@ -60,7 +65,11 @@ export function CreateDatadogDrain(config: DatadogDrainConfig): Drain {
       });
 
       if (!response.ok) {
-        throw new Error(`Datadog drain failed: ${response.status} ${response.statusText}`);
+        throw CreateDomainError('drain', 'DRAIN_HTTP_FAILURE', 'Datadog drain request failed', {
+          statusCode: response.status,
+          details: { provider: 'datadog', statusText: response.statusText, endpoint },
+          retryable: response.status >= 500,
+        });
       }
     } catch (error) {
       console.error('Datadog drain error:', error);

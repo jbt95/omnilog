@@ -82,6 +82,20 @@ export function CreateLambdaHandler<
 ): (event: LambdaEvent, context: LambdaContext) => Result | Promise<Result> {
   return (event, context) => {
     const mergedContext = BuildContext(event, context, options) as z.output<ContextSchema>;
-    return loggerFactory.Scoped(mergedContext, (logger) => handler(event, context, logger));
+    return loggerFactory.Scoped(mergedContext, async (logger) => {
+      try {
+        return await handler(event, context, logger);
+      } catch (error) {
+        logger.CaptureError(error, {
+          source: 'integration.lambda',
+          details: {
+            method: mergedContext.method as string | undefined,
+            path: mergedContext.path as string | undefined,
+            requestId: mergedContext.requestId as string | undefined,
+          },
+        });
+        throw error;
+      }
+    });
   };
 }

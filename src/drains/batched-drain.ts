@@ -9,6 +9,7 @@ import type {
   Envelope,
   Sink,
 } from '../types.js';
+import { CreateDomainError } from '../error.js';
 
 export type DrainBatchOptions = Pick<
   DrainConfig,
@@ -253,7 +254,12 @@ export class BatchedDrain<Context, Payload> {
       }
     }
 
-    throw lastError ?? new Error('Drain send failed');
+    throw (
+      lastError ??
+      CreateDomainError('drain', 'DRAIN_HTTP_FAILURE', 'Drain send failed after retries', {
+        retryable: false,
+      })
+    );
   }
 
   private async PublishDeadLetter(
@@ -292,7 +298,12 @@ export class BatchedDrain<Context, Payload> {
     const sendPromise = Promise.resolve(this.drain(batch));
     const timeoutPromise = new Promise<never>((_resolve, reject) => {
       timeoutId = setTimeout(() => {
-        reject(new Error(`Drain send timed out after ${timeoutMs}ms`));
+        reject(
+          CreateDomainError('drain', 'DRAIN_TIMEOUT', `Drain send timed out after ${timeoutMs}ms`, {
+            details: { timeoutMs },
+            retryable: true,
+          }),
+        );
       }, timeoutMs);
     });
 

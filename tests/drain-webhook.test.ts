@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Drain } from '../src/index.js';
+import { CreateWebhookDrain } from '../src/drains.js';
 import type { DrainFailure } from '../src/index.js';
 import { CreateEvent } from './drain-test-helpers.js';
 
@@ -158,6 +159,25 @@ describe('Drain.WebhookSink', function DrainWebhookSinkSuite() {
     expect(deadLetterEvents[0]?.attempts).toBe(2);
     expect(deadLetterEvents[0]?.events).toHaveLength(1);
     expect(deadLetterEvents[0]?.reason).toBe('delivery-failed');
+    errorSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it('throws typed error for provider request failures', async function ThrowsTypedErrorForProviderRequestFailures() {
+    const fetchSpy = vi.fn(async () => new Response(null, { status: 503, statusText: 'down' }));
+    vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const webhookDrain = CreateWebhookDrain({
+      url: 'https://example.com/webhook',
+    });
+
+    await expect(webhookDrain([CreateEvent('drain.webhook.provider')])).rejects.toMatchObject({
+      code: 'DRAIN_HTTP_FAILURE',
+      domain: 'drain',
+      statusCode: 503,
+    });
+
     errorSpy.mockRestore();
     vi.unstubAllGlobals();
   });

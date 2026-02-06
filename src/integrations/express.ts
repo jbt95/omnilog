@@ -49,7 +49,28 @@ export function CreateExpressMiddleware<
     const context = BuildContext(req, options) as z.output<ContextSchema>;
     return loggerFactory.Scoped(context, (logger) => {
       (req as unknown as Record<string, unknown>)[loggerKey] = logger;
-      return next();
+      try {
+        const result = next();
+        return Promise.resolve(result).catch((error) => {
+          logger.CaptureError(error, {
+            source: 'integration.express',
+            details: {
+              method: req.method,
+              path: req.originalUrl ?? req.path,
+            },
+          });
+          throw error;
+        });
+      } catch (error) {
+        logger.CaptureError(error, {
+          source: 'integration.express',
+          details: {
+            method: req.method,
+            path: req.originalUrl ?? req.path,
+          },
+        });
+        throw error;
+      }
     });
   };
 }

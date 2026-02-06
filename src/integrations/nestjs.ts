@@ -80,7 +80,19 @@ class TypedLogInterceptor<
         ContextSchema,
         Events
       >;
-      return next.handle();
+      try {
+        return next.handle();
+      } catch (error) {
+        logger.CaptureError(error, {
+          source: 'integration.nestjs',
+          details: {
+            method: request.method,
+            path: request.originalUrl ?? request.path,
+            requestId: ResolveHeader(request, 'x-request-id'),
+          },
+        });
+        throw error;
+      }
     }) as ReturnType<CallHandler['handle']>;
   }
 }

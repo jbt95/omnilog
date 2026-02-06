@@ -13,4 +13,18 @@ describe('Context', function ContextSuite() {
 
     expect(result).toEqual({ traceId: 'trace_1', userId: 'user_1' });
   });
+
+  it('throws typed errors for invalid context', function ThrowsTypedErrorsForInvalidContext() {
+    const contextSchema = z.object({ traceId: z.string() });
+    const contextManager = Context.Create(contextSchema);
+
+    expect(() =>
+      contextManager.Run({ traceId: 1 } as unknown as z.output<typeof contextSchema>, () => null),
+    ).toThrowError(
+      expect.objectContaining({
+        code: 'CONTEXT_INVALID',
+        domain: 'context',
+      }),
+    );
+  });
 });

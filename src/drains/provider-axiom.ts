@@ -1,4 +1,5 @@
 import type { Drain, DrainConfig } from '../types.js';
+import { CreateDomainError } from '../error.js';
 
 /**
  * Create an Axiom drain.
@@ -10,7 +11,11 @@ export function CreateAxiomDrain(config: DrainConfig): Drain {
 
   return async (events) => {
     if (!endpoint || !apiKey || !dataset) {
-      console.warn('Axiom drain: missing configuration');
+      console.warn('Axiom drain: missing configuration', {
+        code: 'DRAIN_CONFIGURATION_MISSING',
+        domain: 'drain',
+        provider: 'axiom',
+      });
       return;
     }
 
@@ -26,7 +31,11 @@ export function CreateAxiomDrain(config: DrainConfig): Drain {
       });
 
       if (!response.ok) {
-        throw new Error(`Axiom drain failed: ${response.status} ${response.statusText}`);
+        throw CreateDomainError('drain', 'DRAIN_HTTP_FAILURE', 'Axiom drain request failed', {
+          statusCode: response.status,
+          details: { provider: 'axiom', statusText: response.statusText, endpoint },
+          retryable: response.status >= 500,
+        });
       }
     } catch (error) {
       console.error('Axiom drain error:', error);

@@ -56,8 +56,11 @@ describe('Logger', function LoggerSuite() {
     const loggerFactory = TypedLogger.For(registry);
     const logger = loggerFactory.Singleton();
 
-    expect(() => logger.Emit('order.created', { id: 'order_1' })).toThrow(
-      'Missing required context',
+    expect(() => logger.Emit('order.created', { id: 'order_1' })).toThrowError(
+      expect.objectContaining({
+        code: 'LOGGER_MISSING_REQUIRED_CONTEXT',
+        domain: 'logger',
+      }),
     );
   });
 
@@ -271,8 +274,11 @@ describe('Logger', function LoggerSuite() {
     });
     const logger = loggerFactory.Singleton();
 
-    expect(() => logger.Emit('pii.blocked', { email: 'person@example.com' })).toThrow(
-      'PII guard detected',
+    expect(() => logger.Emit('pii.blocked', { email: 'person@example.com' })).toThrowError(
+      expect.objectContaining({
+        code: 'LOGGER_PII_GUARD_BLOCKED',
+        domain: 'logger',
+      }),
     );
   });
 
@@ -301,5 +307,45 @@ describe('Logger', function LoggerSuite() {
     );
     expect(matchingCalls).toHaveLength(1);
     warnSpy.mockRestore();
+  });
+
+  it('captures thrown logger errors as internal events when enabled', function CapturesThrownLoggerErrorsAsInternalEventsWhenEnabled() {
+    const contextSchema = z.object({ traceId: z.string().optional() });
+    const registry = Registry.Create(
+      contextSchema,
+      (registry) =>
+        [
+          registry.DefineEvent('known.event', z.object({ ok: z.boolean() }), {
+            kind: 'log',
+          }),
+        ] as const,
+    );
+    const memory = Sink.Memory<z.output<typeof contextSchema>>();
+    const loggerFactory = TypedLogger.For(registry, {
+      sinks: [memory],
+      captureErrorsAsEvent: true,
+    });
+    const logger = loggerFactory.Singleton();
+
+    expect(() =>
+      (logger as unknown as { Emit: (name: string, payload: unknown) => unknown }).Emit(
+        'missing.event',
+        {},
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: 'LOGGER_UNKNOWN_EVENT',
+        domain: 'logger',
+      }),
+    );
+
+    expect(memory.events).toHaveLength(1);
+    expect(memory.events[0]?.name).toBe('typedlog.internal.error');
+    expect(memory.events[0]?.level).toBe('error');
+
+    const payload = memory.events[0]?.payload as Record<string, unknown> | undefined;
+    expect(payload?.code).toBe('LOGGER_UNKNOWN_EVENT');
+    expect(payload?.domain).toBe('logger');
+    expect(payload?.source).toBe('emit');
   });
 });

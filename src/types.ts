@@ -237,6 +237,32 @@ export type Policy = {
 };
 
 /**
+ * Internal logger error-capture event configuration.
+ */
+export type ErrorCaptureOptions = {
+  /** Enable internal error events (default: true when object form is provided) */
+  enabled?: boolean;
+  /** Event name used for captured errors */
+  eventName?: string;
+  /** Level assigned to captured error events */
+  level?: LogLevel;
+  /** Include current logger context in captured events (default: true) */
+  includeContext?: boolean;
+  /** Include stack trace in captured payload (default: true) */
+  includeStack?: boolean;
+};
+
+/**
+ * Options for explicit logger error capture.
+ */
+export type CapturedErrorOptions = {
+  /** Logical source of the captured error */
+  source?: string;
+  /** Additional input details to attach to payload */
+  details?: Record<string, unknown>;
+};
+
+/**
  * Sampling rule for dynamic event sampling
  */
 export type SamplingRule = {
@@ -458,13 +484,49 @@ export type EventDefExport = {
 };
 
 /**
+ * Error domains emitted by typedlog.
+ */
+export type ErrorDomain =
+  | 'registry'
+  | 'logger'
+  | 'typed-logger'
+  | 'context'
+  | 'framework'
+  | 'drain'
+  | 'integration'
+  | 'unknown';
+
+/**
+ * Stable error codes emitted by typedlog.
+ */
+export type ErrorCode =
+  | 'REGISTRY_DUPLICATE_EVENT'
+  | 'LOGGER_UNKNOWN_EVENT'
+  | 'LOGGER_INVALID_PAYLOAD'
+  | 'LOGGER_INVALID_CONTEXT'
+  | 'LOGGER_MISSING_REQUIRED_CONTEXT'
+  | 'LOGGER_RATE_LIMIT_EXCEEDED'
+  | 'LOGGER_PII_GUARD_BLOCKED'
+  | 'TYPED_LOGGER_NO_SCOPE'
+  | 'TYPED_LOGGER_UNKNOWN_EVENT'
+  | 'SIMULATION_INVALID_INPUT'
+  | 'CONTEXT_INVALID'
+  | 'DRAIN_HTTP_FAILURE'
+  | 'DRAIN_TIMEOUT'
+  | 'DRAIN_CONFIGURATION_MISSING'
+  | 'INTEGRATION_INVALID_CONTEXT'
+  | 'UNKNOWN_ERROR';
+
+/**
  * Error context for structured errors
  */
 export type ErrorContext = {
   /** Error message */
   message: string;
   /** Error code */
-  code?: string;
+  code?: ErrorCode | string;
+  /** Error domain */
+  domain?: ErrorDomain;
   /** Why the error occurred */
   reason?: string;
   /** How to fix the error */
@@ -473,6 +535,14 @@ export type ErrorContext = {
   documentation?: string;
   /** Error breadcrumbs */
   breadcrumbs?: Breadcrumb[];
+  /** Additional structured details */
+  details?: Record<string, unknown>;
+  /** Original error cause */
+  cause?: unknown;
+  /** Whether retrying can help */
+  retryable?: boolean;
+  /** Optional status code */
+  statusCode?: number;
 };
 
 /**

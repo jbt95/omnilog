@@ -6,6 +6,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 import type { ContextEnricher, ContextManager } from './types.js';
+import { CreateDomainError } from './error.js';
 
 /**
  * Create a context manager for async context propagation
@@ -33,7 +34,10 @@ export function CreateContext<Schema extends z.ZodObject<z.ZodRawShape>>(
     const result = schema.safeParse(input);
 
     if (!result.success) {
-      throw new Error(`Invalid context: ${result.error.message}`);
+      throw CreateDomainError('context', 'CONTEXT_INVALID', 'Invalid context', {
+        reason: result.error.message,
+        resolution: 'Provide context that matches the configured context schema.',
+      });
     }
 
     return result.data;

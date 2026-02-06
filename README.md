@@ -10,8 +10,11 @@ Schema-first, type-safe structured logging and observability for TypeScript.
 - Schema-first event definitions with Zod validation
 - Type-safe payloads and context inferred from schemas
 - Request-scoped logging via `AsyncLocalStorage`
+- Granular typed errors with stable `code` and `domain` values
 - Event-level governance with redaction and PII guardrails
 - Dynamic sampling and per-event rate limiting
+- Automatic exception capture in framework integrations (`typedlog.internal.error`)
+- Manual service-level exception capture with `logger.CaptureError(...)`
 - Typed drain handles with retry, backpressure, telemetry, and dead-letter support
 - Provider-native drains for Axiom, OTLP, Webhook, Datadog, Loki, and Better Stack
 - Dead-letter replay tooling for recovery workflows
@@ -242,9 +245,92 @@ if (!report.compatible) {
 }
 ```
 
+## Errors
+
+typedlog exposes structured errors with stable `code` and `domain` values.
+
+```typescript
+import { Error as LogError } from 'typedlog';
+
+try {
+  logger.Emit('user.signed_in', payload);
+} catch (raw) {
+  const error = LogError.Parse(raw);
+  console.error(error.code, error.domain, error.message);
+}
+```
+
+You can also emit internal error events automatically:
+
+```typescript
+const loggerFactory = TypedLogger.For(registry, {
+  sinks: [drain.Sink],
+  captureErrorsAsEvent: {
+    enabled: true,
+    eventName: 'typedlog.internal.error',
+    level: 'error',
+  },
+});
+```
+
+Or capture service-level errors manually:
+
+```typescript
+await loggerFactory.Scoped({ traceId: 'req-1' }, async (logger) => {
+  try {
+    await service.DoWork();
+  } catch (error) {
+    logger.CaptureError(error, {
+      source: 'service.orders',
+      details: { operation: 'DoWork' },
+    });
+    throw error;
+  }
+});
+```
+
+```typescript
+throw LogError.Create({
+  message: 'Missing request context',
+  code: 'TYPED_LOGGER_NO_SCOPE',
+  domain: 'typed-logger',
+  resolution: 'Wrap your code inside loggerFactory.Scoped(...)',
+});
+```
+
+### Common Error Codes
+
+| Code | Domain | Meaning |
+| --- | --- | --- |
+| `LOGGER_UNKNOWN_EVENT` | `logger` | Emitted event name does not exist in registry |
+| `LOGGER_INVALID_PAYLOAD` | `logger` | Payload failed schema validation |
+| `LOGGER_INVALID_CONTEXT` | `logger` | Context failed schema validation |
+| `LOGGER_MISSING_REQUIRED_CONTEXT` | `logger` | Required context key is missing |
+| `LOGGER_PII_GUARD_BLOCKED` | `logger` | PII guard blocked emission |
+| `LOGGER_RATE_LIMIT_EXCEEDED` | `logger` | Rate limit exceeded and `onLimit: 'throw'` |
+| `TYPED_LOGGER_NO_SCOPE` | `typed-logger` | `Get()` was called outside `Scoped(...)` |
+| `REGISTRY_DUPLICATE_EVENT` | `registry` | Two events share the same name |
+| `DRAIN_HTTP_FAILURE` | `drain` | Drain provider returned non-2xx response |
+| `DRAIN_TIMEOUT` | `drain` | Drain send attempt timed out |
+
 ## Integrations
 
 Integrations use official framework types. Install the corresponding packages to get full typing support.
+`Middleware.Express`, `Middleware.Hono`, `Handler.Lambda`, `Handler.Worker`, and `TypedLogModule` handlers automatically catch thrown user errors, emit `typedlog.internal.error`, and then rethrow the original error.
+
+### Automatic Exception Capture
+
+Framework integrations now capture exceptions thrown by user handlers/middleware, emit an internal event, and rethrow the original error.
+
+```typescript
+const loggerFactory = TypedLogger.For(registry, {
+  sinks: [drain.Sink],
+});
+
+// On thrown user errors, integrations emit:
+// event name: "typedlog.internal.error"
+// payload includes: message, code, domain, source, stack
+```
 
 ### Express
 
@@ -257,6 +343,11 @@ app.use(
     GetContext: (req) => ({ userId: req.header('x-user-id') }),
   }),
 );
+
+app.get('/orders/:id', (req, res) => {
+  throw new Error('Database unavailable');
+  // The middleware captures and emits typedlog.internal.error, then rethrows.
+});
 ```
 
 ### Hono
@@ -297,8 +388,10 @@ import { Handler } from 'typedlog';
 
 export const handler = Handler.Lambda(loggerFactory, async (event, context, logger) => {
   logger.Emit('lambda.invoke', { path: event.rawPath });
+  if (!event.rawPath) throw new Error('Missing rawPath');
   return { statusCode: 200, body: 'ok' };
 });
+// Handler.Lambda captures thrown errors as typedlog.internal.error and rethrows.
 ```
 
 ### Cloudflare Workers
@@ -320,16 +413,22 @@ export default {
 
 - `Registry.Create(contextSchema, (registry) => events)`
 - `registry.DefineEvent(name, schema, options)`
+- `Registry.SchemaFingerprint(schema)`
 - `TypedLogger.For(registry, options)`
 - `TypedLogger.For(...).Scoped(context, (logger) => fn)`
 - `TypedLogger.For(...).Get()`
+- `logger.CaptureError(error, { source, details })`
 - `TypedLogger.Simulate(...)`
 - `Sink.Environment()`
 - `Sink.Memory()`
+- `Sink.Visual()`, `Sink.Structured()`
 - `Drain.AxiomSink()`, `Drain.OTLPSink()`, `Drain.WebhookSink()`
 - `Drain.DatadogSink()`, `Drain.LokiSink()`, `Drain.BetterStackSink()`
-- `Drain.DeadLetterFile()`, `Drain.FileSource()`
-- `Context.Runtime()`, `Context.Region()`, `Context.RequestHeaders()`
+- `Drain.DeadLetterFile()`, `Drain.FileSource()`, `Drain.Fingerprint()`
+- `Error.Create()`, `Error.Domain()`, `Error.Parse()`, `Error.Typed`
+- `Redaction.Apply()`, `Redaction.Policy()`
+- `Context.Create()`, `Context.Runtime()`, `Context.Region()`, `Context.RequestHeaders()`
+- `Context.Request()`, `Context.Extract()`, `Context.AutoFlush()`
 - `Middleware.Express()`, `Middleware.Hono()`
 - `Handler.Lambda()`, `Handler.Worker()`
 - `TypedLogModule.forRoot(...)`

@@ -40,7 +40,12 @@ describe('TypedLogger', function TypedLoggerSuite() {
     );
     const loggerFactory = TypedLogger.For(registry);
 
-    expect(() => loggerFactory.Get()).toThrow('No logger available in the current scope');
+    expect(() => loggerFactory.Get()).toThrowError(
+      expect.objectContaining({
+        code: 'TYPED_LOGGER_NO_SCOPE',
+        domain: 'typed-logger',
+      }),
+    );
   });
 
   it('exposes logger via Get inside scope', async function ExposesLoggerViaGetInsideScope() {
@@ -148,5 +153,33 @@ describe('TypedLogger', function TypedLoggerSuite() {
     });
 
     expect(memory.events).toHaveLength(1);
+  });
+
+  it('throws typed simulation errors for invalid input', function ThrowsTypedSimulationErrorsForInvalidInput() {
+    const contextSchema = z.object({ traceId: z.string() });
+    const registry = Registry.Create(
+      contextSchema,
+      (registry) =>
+        [
+          registry.DefineEvent('simulate.invalid', z.object({ ok: z.boolean() }), {
+            kind: 'log',
+            require: ['traceId'] as const,
+          }),
+        ] as const,
+    );
+
+    expect(() =>
+      TypedLogger.Simulate({
+        registry,
+        name: 'simulate.invalid',
+        context: {} as unknown as { traceId: string },
+        payload: { ok: true },
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: 'SIMULATION_INVALID_INPUT',
+        domain: 'typed-logger',
+      }),
+    );
   });
 });

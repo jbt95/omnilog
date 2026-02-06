@@ -59,7 +59,18 @@ export function CreateHonoMiddleware<
     const mergedContext = BuildContext(context, options) as z.output<ContextSchema>;
     await loggerFactory.Scoped(mergedContext, async (logger) => {
       context.set(loggerKey, logger);
-      await (next as HonoNext)();
+      try {
+        await (next as HonoNext)();
+      } catch (error) {
+        logger.CaptureError(error, {
+          source: 'integration.hono',
+          details: {
+            method: context.req.method,
+            path: ResolvePath(context),
+          },
+        });
+        throw error;
+      }
     });
   };
 }

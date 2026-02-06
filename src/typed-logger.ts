@@ -14,6 +14,7 @@ import type {
 } from './types.js';
 import type { LoggerInstance, LoggerOptions, LoggerRuntimeState } from './logger.js';
 import { CreateLogger } from './logger.js';
+import { CreateDomainError } from './error.js';
 import { ApplyRedaction } from './redaction.js';
 import { DetectPii } from './pii-guard.js';
 
@@ -61,26 +62,48 @@ export class TypedLogger {
     const { registry, name, payload, context, policy } = options;
     const event = registry.eventsByName[name] as EventByName<Events, Name> | undefined;
     if (!event) {
-      throw new Error(`Unknown event: ${String(name)}`);
+      throw CreateDomainError('typed-logger', 'TYPED_LOGGER_UNKNOWN_EVENT', `Unknown event: ${String(name)}`, {
+        details: { eventName: String(name) },
+        resolution: 'Define the event in Registry.Create(...) before simulation.',
+      });
     }
 
     const warnings: string[] = [];
 
     const payloadResult = event.schema.safeParse(payload);
     if (!payloadResult.success) {
-      throw new Error(`Invalid payload for ${event.name}: ${payloadResult.error.message}`);
+      throw CreateDomainError(
+        'typed-logger',
+        'SIMULATION_INVALID_INPUT',
+        `Invalid payload for ${event.name}`,
+        {
+          reason: payloadResult.error.message,
+          details: { eventName: event.name, target: 'payload' },
+          resolution: 'Provide a payload matching the event schema.',
+        },
+      );
     }
 
     const contextResult = registry.contextSchema.safeParse(context);
     if (!contextResult.success) {
-      throw new Error(`Invalid context: ${contextResult.error.message}`);
+      throw CreateDomainError('typed-logger', 'SIMULATION_INVALID_INPUT', 'Invalid context', {
+        reason: contextResult.error.message,
+        details: { target: 'context' },
+        resolution: 'Provide context that matches the registry context schema.',
+      });
     }
 
     if (event.require && event.require.length > 0) {
       for (const requiredKey of event.require) {
         if (contextResult.data[requiredKey as keyof typeof contextResult.data] === undefined) {
-          throw new Error(
+          throw CreateDomainError(
+            'typed-logger',
+            'SIMULATION_INVALID_INPUT',
             `Missing required context "${String(requiredKey)}" for event ${event.name}`,
+            {
+              details: { eventName: event.name, key: String(requiredKey), target: 'context' },
+              resolution: 'Set all required context fields before simulation.',
+            },
           );
         }
       }
@@ -189,7 +212,14 @@ export class TypedLogger {
     function Get(): LoggerInstance<ContextSchema, Events> {
       const logger = loggerStore.getStore();
       if (!logger) {
-        throw new Error('No logger available in the current scope');
+        throw CreateDomainError(
+          'typed-logger',
+          'TYPED_LOGGER_NO_SCOPE',
+          'No logger available in the current scope',
+          {
+            resolution: 'Call TypedLogger.For(...).Scoped(...) before using Get().',
+          },
+        );
       }
       return logger;
     }

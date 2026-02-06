@@ -1,4 +1,5 @@
 import type { BetterStackDrainConfig, Drain, Envelope } from '../types.js';
+import { CreateDomainError } from '../error.js';
 
 function CreateBetterStackNdjson(
   events: Envelope<unknown, unknown>[],
@@ -29,7 +30,11 @@ export function CreateBetterStackDrain(config: BetterStackDrainConfig): Drain {
 
   return async (events) => {
     if (!sourceToken) {
-      console.warn('Better Stack drain: missing source token');
+      console.warn('Better Stack drain: missing source token', {
+        code: 'DRAIN_CONFIGURATION_MISSING',
+        domain: 'drain',
+        provider: 'better-stack',
+      });
       return;
     }
 
@@ -45,7 +50,16 @@ export function CreateBetterStackDrain(config: BetterStackDrainConfig): Drain {
       });
 
       if (!response.ok) {
-        throw new Error(`Better Stack drain failed: ${response.status} ${response.statusText}`);
+        throw CreateDomainError(
+          'drain',
+          'DRAIN_HTTP_FAILURE',
+          'Better Stack drain request failed',
+          {
+            statusCode: response.status,
+            details: { provider: 'better-stack', statusText: response.statusText, endpoint },
+            retryable: response.status >= 500,
+          },
+        );
       }
     } catch (error) {
       console.error('Better Stack drain error:', error);
