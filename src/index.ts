@@ -12,7 +12,7 @@
  * - **Context propagation**: Async context for request-scoped logging
  * - **Field-level governance**: PII redaction, secret masking with tags
  * - **Runtime controls**: Dynamic sampling, rate limits, and policy simulation
- * - **Granular typed errors**: Stable error codes/domains for troubleshooting and control flow
+ * - **Granular structured errors**: Stable error codes/domains for troubleshooting and control flow
  * - **Observability drains**: Built-in Axiom/OTLP/webhook/datadog/loki/better stack sink handles with retry/backpressure
  * - **Integrations**: Native middleware and handler helpers for major runtimes
  *
@@ -65,7 +65,7 @@ import {
   CreateStructuredSink,
   CreateEnvironmentSink,
 } from './sinks.js';
-import { CreateDomainError, CreateError, ParseError, TypedError } from './error.js';
+import { CreateDomainError, CreateError, ParseError, OmniError } from './error.js';
 import { ApplyRedaction, CreateRedactionPolicy } from './redaction.js';
 import {
   CreateAxiomSink,
@@ -113,7 +113,7 @@ export class Drain {
 export class Error {
   static Create: typeof CreateError = CreateError;
   static Parse: typeof ParseError = ParseError;
-  static Typed: typeof TypedError = TypedError;
+  static Omni: typeof OmniError = OmniError;
   static Domain: typeof CreateDomainError = CreateDomainError;
 }
 
@@ -143,7 +143,7 @@ export class Handler {
 }
 
 export { OmniLogger } from './omni-logger.js';
-export { TypedLogModule } from './integrations/nestjs.js';
+export { OmniLogModule } from './integrations/nestjs.js';
 
 export type {
   ContextEnricher,
@@ -203,4 +203,4 @@ export type {
 
 export type { LoggerFactory, LoggerSimulationOptions } from './omni-logger.js';
 export type { IntegrationOptions } from './integrations/integration-options.js';
-export type { TypedLogModuleOptions } from './integrations/nestjs.js';
+export type { OmniLogModuleOptions } from './integrations/nestjs.js';

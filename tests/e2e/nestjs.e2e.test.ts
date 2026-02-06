@@ -5,7 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Request } from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { TypedLogModule } from '../../src/index.js';
+import { OmniLogModule } from '../../src/index.js';
 import { CreateLoggerFixture } from './helpers/logger-fixture.js';
 import { GetJson } from './helpers/http.js';
 
@@ -33,7 +33,7 @@ function CreateTestModule(loggerFactory: LoggerFactoryFixture) {
 
   @Module({
     imports: [
-      TypedLogModule.forRoot({
+      OmniLogModule.forRoot({
         loggerFactory,
         GetContext: (request) => ({ userId: request.header('x-user-id') }),
       }),
@@ -98,7 +98,9 @@ describe('NestJS E2E', function NestjsE2ESuite() {
 
     expect(response.status).toBeGreaterThanOrEqual(500);
 
-    const errorEvent = memory.events.find((candidate) => candidate.name === 'omnilog.internal.error');
+    const errorEvent = memory.events.find(
+      (candidate) => candidate.name === 'omnilog.internal.error',
+    );
     expect(errorEvent).toBeDefined();
     const payload = errorEvent?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.nestjs');

@@ -81,7 +81,9 @@ describe('Hono E2E', function HonoE2ESuite() {
 
     expect(response.status).toBe(500);
 
-    const errorEvent = memory.events.find((candidate) => candidate.name === 'omnilog.internal.error');
+    const errorEvent = memory.events.find(
+      (candidate) => candidate.name === 'omnilog.internal.error',
+    );
     expect(errorEvent).toBeDefined();
     const payload = errorEvent?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.hono');

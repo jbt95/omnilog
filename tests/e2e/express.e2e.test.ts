@@ -36,10 +36,17 @@ describe('Express E2E', function ExpressE2ESuite() {
       throw new Error('express boom');
     });
 
-    app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
-      const message = error instanceof Error ? error.message : String(error);
-      response.status(500).json({ ok: false, message });
-    });
+    app.use(
+      (
+        error: unknown,
+        _request: express.Request,
+        response: express.Response,
+        _next: express.NextFunction,
+      ) => {
+        const message = error instanceof Error ? error.message : String(error);
+        response.status(500).json({ ok: false, message });
+      },
+    );
 
     const runningServer = await StartServer(createServer(app));
     baseUrl = runningServer.baseUrl;
@@ -87,7 +94,9 @@ describe('Express E2E', function ExpressE2ESuite() {
     expect(result.status).toBe(500);
     expect(result.body?.message).toBe('express boom');
 
-    const errorEvent = memory.events.find((candidate) => candidate.name === 'omnilog.internal.error');
+    const errorEvent = memory.events.find(
+      (candidate) => candidate.name === 'omnilog.internal.error',
+    );
     expect(errorEvent).toBeDefined();
     const payload = errorEvent?.payload as Record<string, unknown> | undefined;
     expect(payload?.source).toBe('integration.express');

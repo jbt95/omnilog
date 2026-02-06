@@ -155,7 +155,7 @@ describe('OmniLogger', function OmniLoggerSuite() {
     expect(memory.events).toHaveLength(1);
   });
 
-  it('throws typed simulation errors for invalid input', function ThrowsTypedSimulationErrorsForInvalidInput() {
+  it('throws structured simulation errors for invalid input', function ThrowsStructuredSimulationErrorsForInvalidInput() {
     const contextSchema = z.object({ traceId: z.string() });
     const registry = Registry.Create(
       contextSchema,

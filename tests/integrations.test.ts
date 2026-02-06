@@ -8,7 +8,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import type { ExecutionContext as WorkerExecutionContext } from '@cloudflare/workers-types';
 import type { Observable } from 'rxjs';
 import { firstValueFrom, of, throwError } from 'rxjs';
-import { Handler, Middleware, Registry, Sink, TypedLogModule, OmniLogger } from '../src/index.js';
+import { Handler, Middleware, Registry, Sink, OmniLogModule, OmniLogger } from '../src/index.js';
 
 function CreateTesomniLoggerFactory() {
   const contextSchema = z.object({
@@ -151,7 +151,7 @@ describe('Integrations', function IntegrationsSuite() {
 
   it('nestjs module interceptor scopes and attaches logger', async function NestModuleInterceptorScopesAndAttachesLogger() {
     const { loggerFactory, memory } = CreateTesomniLoggerFactory();
-    const moduleDefinition = TypedLogModule.forRoot({ loggerFactory });
+    const moduleDefinition = OmniLogModule.forRoot({ loggerFactory });
     const providers = (moduleDefinition.providers ?? []) as Provider[];
     const interceptorProvider = providers.find((provider): provider is ValueProvider => {
       return (
@@ -232,12 +232,9 @@ describe('Integrations', function IntegrationsSuite() {
     } as unknown as HonoContext;
 
     await expect(
-      middleware(
-        context,
-        (async () => {
-          throw new Error('hono boom');
-        }) as HonoNext,
-      ),
+      middleware(context, (async () => {
+        throw new Error('hono boom');
+      }) as HonoNext),
     ).rejects.toThrow('hono boom');
 
     expect(memory.events).toHaveLength(1);
@@ -294,7 +291,7 @@ describe('Integrations', function IntegrationsSuite() {
 
   it('nestjs interceptor captures thrown user errors as internal events', async function NestjsInterceptorCapturesThrownUserErrorsAsInternalEvents() {
     const { loggerFactory, memory } = CreateTesomniLoggerFactory();
-    const moduleDefinition = TypedLogModule.forRoot({ loggerFactory });
+    const moduleDefinition = OmniLogModule.forRoot({ loggerFactory });
     const providers = (moduleDefinition.providers ?? []) as Provider[];
     const interceptorProvider = providers.find((provider): provider is ValueProvider => {
       return (
@@ -316,14 +313,14 @@ describe('Integrations', function IntegrationsSuite() {
 
     await expect(
       firstValueFrom(
-      interceptor.intercept(
-        { switchToHttp: () => ({ getRequest: () => request }) } as ExecutionContext,
-        {
-          handle: () => {
-            return throwError(() => new Error('nest boom'));
+        interceptor.intercept(
+          { switchToHttp: () => ({ getRequest: () => request }) } as ExecutionContext,
+          {
+            handle: () => {
+              return throwError(() => new Error('nest boom'));
+            },
           },
-        },
-      ) as Observable<unknown>,
+        ) as Observable<unknown>,
       ),
     ).rejects.toThrow('nest boom');
 

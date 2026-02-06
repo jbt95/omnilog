@@ -48,7 +48,7 @@ describe('Framework', function FrameworkSuite() {
     expect(target.flushCount).toBe(2);
   });
 
-  it('throws typed errors for invalid request context', function ThrowsTypedErrorsForInvalidRequestContext() {
+  it('throws structured errors for invalid request context', function ThrowsStructuredErrorsForInvalidRequestContext() {
     const contextSchema = z.object({ userId: z.string() }).passthrough();
     const contextManager = Context.Request(contextSchema);
 

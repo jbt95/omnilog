@@ -10,7 +10,7 @@ Schema-first, type-safe structured logging and observability for TypeScript.
 - Schema-first event definitions with Zod validation
 - Type-safe payloads and context inferred from schemas
 - Request-scoped logging via `AsyncLocalStorage`
-- Granular typed errors with stable `code` and `domain` values
+- Granular structured errors with stable `code` and `domain` values
 - Event-level governance with redaction and PII guardrails
 - Dynamic sampling and per-event rate limiting
 - Automatic exception capture in framework integrations (`omnilog.internal.error`)
@@ -301,23 +301,23 @@ throw LogError.Create({
 
 ### Common Error Codes
 
-| Code | Domain | Meaning |
-| --- | --- | --- |
-| `LOGGER_UNKNOWN_EVENT` | `logger` | Emitted event name does not exist in registry |
-| `LOGGER_INVALID_PAYLOAD` | `logger` | Payload failed schema validation |
-| `LOGGER_INVALID_CONTEXT` | `logger` | Context failed schema validation |
-| `LOGGER_MISSING_REQUIRED_CONTEXT` | `logger` | Required context key is missing |
-| `LOGGER_PII_GUARD_BLOCKED` | `logger` | PII guard blocked emission |
-| `LOGGER_RATE_LIMIT_EXCEEDED` | `logger` | Rate limit exceeded and `onLimit: 'throw'` |
-| `OMNI_LOGGER_NO_SCOPE` | `omni-logger` | `Get()` was called outside `Scoped(...)` |
-| `REGISTRY_DUPLICATE_EVENT` | `registry` | Two events share the same name |
-| `DRAIN_HTTP_FAILURE` | `drain` | Drain provider returned non-2xx response |
-| `DRAIN_TIMEOUT` | `drain` | Drain send attempt timed out |
+| Code                              | Domain        | Meaning                                       |
+| --------------------------------- | ------------- | --------------------------------------------- |
+| `LOGGER_UNKNOWN_EVENT`            | `logger`      | Emitted event name does not exist in registry |
+| `LOGGER_INVALID_PAYLOAD`          | `logger`      | Payload failed schema validation              |
+| `LOGGER_INVALID_CONTEXT`          | `logger`      | Context failed schema validation              |
+| `LOGGER_MISSING_REQUIRED_CONTEXT` | `logger`      | Required context key is missing               |
+| `LOGGER_PII_GUARD_BLOCKED`        | `logger`      | PII guard blocked emission                    |
+| `LOGGER_RATE_LIMIT_EXCEEDED`      | `logger`      | Rate limit exceeded and `onLimit: 'throw'`    |
+| `OMNI_LOGGER_NO_SCOPE`            | `omni-logger` | `Get()` was called outside `Scoped(...)`      |
+| `REGISTRY_DUPLICATE_EVENT`        | `registry`    | Two events share the same name                |
+| `DRAIN_HTTP_FAILURE`              | `drain`       | Drain provider returned non-2xx response      |
+| `DRAIN_TIMEOUT`                   | `drain`       | Drain send attempt timed out                  |
 
 ## Integrations
 
 Integrations use official framework types. Install the corresponding packages to get full typing support.
-`Middleware.Express`, `Middleware.Hono`, `Handler.Lambda`, `Handler.Worker`, and `TypedLogModule` handlers automatically catch thrown user errors, emit `omnilog.internal.error`, and then rethrow the original error.
+`Middleware.Express`, `Middleware.Hono`, `Handler.Lambda`, `Handler.Worker`, and `OmniLogModule` handlers automatically catch thrown user errors, emit `omnilog.internal.error`, and then rethrow the original error.
 
 ### Automatic Exception Capture
 
@@ -368,11 +368,11 @@ app.use(
 
 ```typescript
 import { Module } from '@nestjs/common';
-import { TypedLogModule } from 'omnilog';
+import { OmniLogModule } from 'omnilog';
 
 @Module({
   imports: [
-    TypedLogModule.forRoot({
+    OmniLogModule.forRoot({
       loggerFactory,
       LoggerKey: 'logger',
       GetContext: (req) => ({ userId: req.header('x-user-id') }),
@@ -426,13 +426,13 @@ export default {
 - `Drain.AxiomSink()`, `Drain.OTLPSink()`, `Drain.WebhookSink()`
 - `Drain.DatadogSink()`, `Drain.LokiSink()`, `Drain.BetterStackSink()`
 - `Drain.DeadLetterFile()`, `Drain.FileSource()`, `Drain.Fingerprint()`
-- `Error.Create()`, `Error.Domain()`, `Error.Parse()`, `Error.Typed`
+- `Error.Create()`, `Error.Domain()`, `Error.Parse()`, `Error.Omni`
 - `Redaction.Apply()`, `Redaction.Policy()`
 - `Context.Create()`, `Context.Runtime()`, `Context.Region()`, `Context.RequestHeaders()`
 - `Context.Request()`, `Context.Extract()`, `Context.AutoFlush()`
 - `Middleware.Express()`, `Middleware.Hono()`
 - `Handler.Lambda()`, `Handler.Worker()`
-- `TypedLogModule.forRoot(...)`
+- `OmniLogModule.forRoot(...)`
 
 ## Testing
 

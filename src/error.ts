@@ -1,7 +1,7 @@
 /**
  * Structured error handling with breadcrumbs, domains, and stable codes
  * @module error
-*/
+ */
 
 import type { ErrorContext, Breadcrumb } from './types.js';
 import type { ErrorCode, ErrorDomain } from './types.js';
@@ -25,7 +25,7 @@ import type { ErrorCode, ErrorDomain } from './types.js';
  * throw error;
  * ```
  */
-export class TypedError extends Error {
+export class OmniError extends Error {
   /** Error code */
   readonly code?: string;
   /** Error domain */
@@ -53,7 +53,7 @@ export class TypedError extends Error {
 
   constructor(context: ErrorContext) {
     super(context.message, context.cause !== undefined ? { cause: context.cause } : undefined);
-    this.name = 'TypedError';
+    this.name = 'OmniError';
     if (context.code !== undefined) {
       (this as Record<string, unknown>).code = context.code;
     }
@@ -149,7 +149,7 @@ export class TypedError extends Error {
  * Create a structured error
  *
  * @param context - Error context with message, code, reason, etc.
- * @returns TypedError instance
+ * @returns OmniError instance
  *
  * @example
  * ```typescript
@@ -161,12 +161,12 @@ export class TypedError extends Error {
  * });
  * ```
  */
-export function CreateError(context: ErrorContext): TypedError {
-  return new TypedError(context);
+export function CreateError(context: ErrorContext): OmniError {
+  return new OmniError(context);
 }
 
 /**
- * Create a typed error for a specific domain and code.
+ * Create a structured error for a specific domain and code.
  *
  * @example
  * ```typescript
@@ -178,8 +178,8 @@ export function CreateDomainError(
   code: ErrorCode,
   message: string,
   options: Omit<ErrorContext, 'message' | 'code' | 'domain'> = {},
-): TypedError {
-  return new TypedError({
+): OmniError {
+  return new OmniError({
     message,
     code,
     domain,
@@ -188,10 +188,10 @@ export function CreateDomainError(
 }
 
 /**
- * Parse any error into a TypedError
+ * Parse any error into an OmniError
  *
  * @param error - Error to parse
- * @returns TypedError with structured information
+ * @returns OmniError with structured information
  *
  * @example
  * ```typescript
@@ -203,8 +203,8 @@ export function CreateDomainError(
  * }
  * ```
  */
-export function ParseError(error: unknown): TypedError {
-  if (error instanceof TypedError) {
+export function ParseError(error: unknown): OmniError {
+  if (error instanceof OmniError) {
     return error;
   }
 
@@ -212,7 +212,7 @@ export function ParseError(error: unknown): TypedError {
     const data = error as Error & { code?: unknown; domain?: unknown };
     const code = typeof data.code === 'string' ? data.code : 'UNKNOWN_ERROR';
     const domain = typeof data.domain === 'string' ? data.domain : 'unknown';
-    return new TypedError({
+    return new OmniError({
       message: error.message,
       code,
       domain: domain as ErrorDomain,
@@ -227,14 +227,13 @@ export function ParseError(error: unknown): TypedError {
     const message = typeof data.message === 'string' ? data.message : String(error);
     const code = typeof data.code === 'string' ? data.code : 'UNKNOWN_ERROR';
     const domain = typeof data.domain === 'string' ? data.domain : 'unknown';
-    const reason =
-      typeof data.reason === 'string' ? data.reason : 'An unexpected error occurred';
+    const reason = typeof data.reason === 'string' ? data.reason : 'An unexpected error occurred';
     const resolution =
       typeof data.resolution === 'string'
         ? data.resolution
         : 'Check the error details and try again';
 
-    return new TypedError({
+    return new OmniError({
       message,
       code,
       domain: domain as ErrorDomain,
@@ -244,7 +243,7 @@ export function ParseError(error: unknown): TypedError {
     });
   }
 
-  return new TypedError({
+  return new OmniError({
     message: String(error),
     code: 'UNKNOWN_ERROR',
     domain: 'unknown',

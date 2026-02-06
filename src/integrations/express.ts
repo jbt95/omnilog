@@ -14,7 +14,10 @@ const OmniLogExpressErrorCaptured = Symbol.for('omnilog.express.error.captured')
 const OmniLogExpressRequestCaptured = Symbol.for('omnilog.express.request.captured');
 
 type CaptureLogger = {
-  CaptureError: (error: unknown, options?: { source?: string; details?: Record<string, unknown> }) => void;
+  CaptureError: (
+    error: unknown,
+    options?: { source?: string; details?: Record<string, unknown> },
+  ) => void;
 };
 
 function ResolveHeader(request: Request, name: string): string | undefined {
@@ -42,11 +45,7 @@ function BuildContext<Context>(
   return { ...baseContext, ...extraContext } as unknown as Partial<Context>;
 }
 
-function CaptureExpressError(
-  request: Request,
-  loggerKey: string,
-  error: unknown,
-): void {
+function CaptureExpressError(request: Request, loggerKey: string, error: unknown): void {
   const candidate = (request as unknown as Record<string, unknown>)[loggerKey];
   if (
     !candidate ||
@@ -74,10 +73,7 @@ function CaptureExpressError(
   });
 }
 
-function ResolveErrorMessageFromResponse(
-  body: unknown,
-  statusCode: number,
-): string {
+function ResolveErrorMessageFromResponse(body: unknown, statusCode: number): string {
   if (body && typeof body === 'object') {
     const record = body as Record<string, unknown>;
     if (typeof record.message === 'string' && record.message.trim().length > 0) {
@@ -120,7 +116,9 @@ export function CreateExpressMiddleware<
   function EnsureErrorMiddleware(request: Request): void {
     const app = request.app as unknown as
       | {
-          use: (handler: (error: unknown, req: Request, res: Response, next: NextFunction) => void) => void;
+          use: (
+            handler: (error: unknown, req: Request, res: Response, next: NextFunction) => void,
+          ) => void;
         }
       | undefined;
     if (!app) return;

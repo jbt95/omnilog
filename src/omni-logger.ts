@@ -1,5 +1,5 @@
 /**
- * Typed logger factory for singleton and request-scoped usage
+ * Logger factory for singleton and request-scoped usage
  * @module omni-logger
  */
 
@@ -62,10 +62,15 @@ export class OmniLogger {
     const { registry, name, payload, context, policy } = options;
     const event = registry.eventsByName[name] as EventByName<Events, Name> | undefined;
     if (!event) {
-      throw CreateDomainError('omni-logger', 'OMNI_LOGGER_UNKNOWN_EVENT', `Unknown event: ${String(name)}`, {
-        details: { eventName: String(name) },
-        resolution: 'Define the event in Registry.Create(...) before simulation.',
-      });
+      throw CreateDomainError(
+        'omni-logger',
+        'OMNI_LOGGER_UNKNOWN_EVENT',
+        `Unknown event: ${String(name)}`,
+        {
+          details: { eventName: String(name) },
+          resolution: 'Define the event in Registry.Create(...) before simulation.',
+        },
+      );
     }
 
     const warnings: string[] = [];

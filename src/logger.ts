@@ -129,9 +129,7 @@ export function CreateLogger<
   const deprecationWarnings = options.runtime?.deprecationWarnings ?? new Set<string>();
   let isCapturingErrorEvent = false;
 
-  function CreateErrorCaptureOptions(
-    input: boolean | ErrorCaptureOptions | undefined,
-  ): {
+  function CreateErrorCaptureOptions(input: boolean | ErrorCaptureOptions | undefined): {
     enabled: boolean;
     eventName: string;
     level: LogLevel;
@@ -539,10 +537,15 @@ export function CreateLogger<
     try {
       const event = registry.eventsByName[name] as EventByName<Events, Name> | undefined;
       if (!event) {
-        throw CreateDomainError('logger', 'LOGGER_UNKNOWN_EVENT', `Unknown event: ${String(name)}`, {
-          details: { eventName: String(name) },
-          resolution: 'Define the event in Registry.Create(...) before emitting it.',
-        });
+        throw CreateDomainError(
+          'logger',
+          'LOGGER_UNKNOWN_EVENT',
+          `Unknown event: ${String(name)}`,
+          {
+            details: { eventName: String(name) },
+            resolution: 'Define the event in Registry.Create(...) before emitting it.',
+          },
+        );
       }
       return EmitEvent(event, payload, overrideContext);
     } catch (error) {
@@ -595,7 +598,9 @@ export function CreateLogger<
         }, {} as Partial<Context>);
 
         const payloadWithErrors =
-          errors.length > 0 ? { ...(payload as Record<string, unknown>), _errors: errors } : payload;
+          errors.length > 0
+            ? { ...(payload as Record<string, unknown>), _errors: errors }
+            : payload;
 
         return EmitEvent(
           event as unknown as Events[number],

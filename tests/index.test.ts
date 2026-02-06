@@ -8,7 +8,7 @@ import {
   Redaction,
   Registry,
   Sink,
-  TypedLogModule,
+  OmniLogModule,
   OmniLogger,
 } from '../src/index.js';
 
@@ -39,7 +39,7 @@ describe('Index Exports', function IndexExportsSuite() {
     expect(typeof Middleware.Hono).toBe('function');
     expect(typeof Handler.Lambda).toBe('function');
     expect(typeof Handler.Worker).toBe('function');
-    expect(typeof TypedLogModule.forRoot).toBe('function');
+    expect(typeof OmniLogModule.forRoot).toBe('function');
     expect(typeof Redaction.Policy).toBe('function');
     expect(typeof LogError.Create).toBe('function');
     expect(typeof LogError.Parse).toBe('function');

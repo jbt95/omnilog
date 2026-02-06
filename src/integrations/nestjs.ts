@@ -20,10 +20,10 @@ import type { LoggerInstance } from '../logger.js';
 import type { IntegrationOptions } from './integration-options.js';
 import { GetIntegrationDefaults } from './integration-options.js';
 
-const TypedLogOptionsToken = 'TYPEDLOG_OPTIONS';
-const TypedLogLoggerFactoryToken = 'TYPEDLOG_LOGGER_FACTORY';
+const OmniLogOptionsToken = 'OMNILOG_OPTIONS';
+const OmniLogLoggerFactoryToken = 'OMNILOG_LOGGER_FACTORY';
 
-export type TypedLogModuleOptions<
+export type OmniLogModuleOptions<
   ContextSchema extends z.ZodObject<z.ZodRawShape>,
   Events extends readonly EventDefAny[],
 > = IntegrationOptions<z.output<ContextSchema>, Request> & {
@@ -55,7 +55,7 @@ function BuildContext<Context>(
   return { ...baseContext, ...extraContext } as unknown as Partial<Context>;
 }
 
-class TypedLogInterceptor<
+class OmniLogInterceptor<
   ContextSchema extends z.ZodObject<z.ZodRawShape>,
   const Events extends readonly EventDefAny[],
 > implements NestInterceptor {
@@ -134,22 +134,22 @@ class TypedLogInterceptor<
   }
 }
 
-export class TypedLogModule {
+export class OmniLogModule {
   static forRoot<
     ContextSchema extends z.ZodObject<z.ZodRawShape>,
     const Events extends readonly EventDefAny[],
-  >(options: TypedLogModuleOptions<ContextSchema, Events>): DynamicModule {
-    const interceptor = new TypedLogInterceptor(options.loggerFactory, options);
+  >(options: OmniLogModuleOptions<ContextSchema, Events>): DynamicModule {
+    const interceptor = new OmniLogInterceptor(options.loggerFactory, options);
     const providers: Provider[] = [
-      { provide: TypedLogOptionsToken, useValue: options },
-      { provide: TypedLogLoggerFactoryToken, useValue: options.loggerFactory },
+      { provide: OmniLogOptionsToken, useValue: options },
+      { provide: OmniLogLoggerFactoryToken, useValue: options.loggerFactory },
       { provide: APP_INTERCEPTOR, useValue: interceptor },
     ];
 
     return {
-      module: TypedLogModule,
+      module: OmniLogModule,
       providers,
-      exports: [TypedLogLoggerFactoryToken],
+      exports: [OmniLogLoggerFactoryToken],
     };
   }
 }

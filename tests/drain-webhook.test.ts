@@ -163,7 +163,7 @@ describe('Drain.WebhookSink', function DrainWebhookSinkSuite() {
     vi.unstubAllGlobals();
   });
 
-  it('throws typed error for provider request failures', async function ThrowsTypedErrorForProviderRequestFailures() {
+  it('throws structured error for provider request failures', async function ThrowsStructuredErrorForProviderRequestFailures() {
     const fetchSpy = vi.fn(async () => new Response(null, { status: 503, statusText: 'down' }));
     vi.stubGlobal('fetch', fetchSpy as unknown as typeof fetch);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
